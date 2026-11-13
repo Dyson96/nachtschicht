@@ -5,7 +5,7 @@
 <!-- Nachtschicht Grand Prix. (c) 2026. Alle Rechte vorbehalten. Kopieren, Veraendern, Weiterverbreiten und Einbetten nur mit schriftlicher Erlaubnis; siehe LICENSE.txt. -->
 <meta name="robots" content="noindex, nofollow">
 <script>(function(){var ok=["dyson96.github.io"],h=location.hostname,loc=h===""||h==="localhost"||h==="127.0.0.1"||h==="[::1]"||/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(h)||/\.local$/.test(h),own=loc||!ok.length||ok.indexOf(h)>=0,fr=false;try{fr=window.top!==window.self}catch(e){fr=true}if(!own||(fr&&!loc)){window.__LOCK=1;document.write('<meta charset="utf-8"><body style="margin:0;background:#050409;color:#ccd;font:16px/1.5 sans-serif;display:grid;place-items:center;height:100vh;text-align:center"><p>Nachtschicht Grand Prix l\u00e4uft nur auf seiner eigenen Adresse.<br><a style="color:#ff4fa0" href="https://dyson96.github.io/nachtschicht/">Zum Spiel</a></p></body>');document.close();if(window.stop)window.stop();}})();</script>
-<script>window.__BUILD="13.11.2026 17:58";</script>
+<script>window.__BUILD="13.11.2026 18:41";</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -1021,6 +1021,7 @@ body.touch .keys { display: none; }
     tyreCR: 1.3,
     muRn: 1.53,
     relax: 0.15,
+    revMax: 1.9,
     fMax: 800,
     power: 7500,
     boostPower: 11200,
@@ -1047,8 +1048,8 @@ body.touch .keys { display: none; }
   };
   var AHEAD_ORDER = ["fest", "dezent", "voraus"];
   var PHYS = {
-    alt: { slide: 0, hit: 0, caster: 0, tyre: 0 },
-    neu: { slide: 1, hit: 1, caster: 0.85, tyre: 1 }
+    alt: { slide: 0, hit: 0, caster: 0, tyre: 0, rev: 0 },
+    neu: { slide: 1, hit: 1, caster: 0.85, tyre: 1, rev: 1 }
   };
   var PHYS_ORDER = ["neu", "alt"];
   var PH = PHYS.neu;
@@ -1303,7 +1304,7 @@ body.touch .keys { display: none; }
       if (k.revTimer > 0.22) reversing = true;
     } else if (u > 1 || k.thr > 0.05) k.revTimer = 0;
     if (reversing) {
-      fDrive = u > -3.6 ? -420 * k.brk : 0;
+      fDrive = PH.rev ? -420 * k.brk * clamp((u + P.revMax) / 0.35, 0, 1) : u > -3.6 ? -420 * k.brk : 0;
     } else {
       fDrive = k.thr * Math.min(fm, pw / Math.max(u, 2.5));
       if (u < -0.2) fDrive = k.thr * fm;
@@ -9299,12 +9300,12 @@ void main(){
       cam.roll = damp(cam.roll, clamp(k.roll * 0.7 - k.ay * 4e-3, -0.12, 0.12), 8, dt);
     }
     const rig = { look: 0, lookV: 0, back: 0, backV: 0, side: 0, sideV: 0, yaw: 0, hx: 0, hxV: 0, hz: 0, hzV: 0, nod: 0, nodV: 0, hy: 0, hyV: 0, tilt: 0, tiltV: 0, rev: 0 };
-    const BACK = { rate: 0.8, knee: 0.3, pull: 10, back: [0.9, 1.1], up: [0.55, 0.6], near: [4.5, 4.5] };
+    const BACK = { rate: 0.6, knee: 0.85, pull: 6 };
     function backing(k, dt) {
-      const want = k.revTimer > 0.22 ? smoothstep(0.3, 1.8, -k.u) * (1 - smoothstep(5, 8, Math.hypot(k.u, k.v))) : 0;
-      rig.rev = cam.init ? damp(rig.rev, want, want > rig.rev ? 4 : 1.2, dt) : want;
+      const want = k.revTimer > 0.22 ? smoothstep(0.15, 0.9, -k.u) * (1 - smoothstep(5, 8, Math.hypot(k.u, k.v))) : 0;
+      rig.rev = cam.init ? damp(rig.rev, want, want > rig.rev ? 4 : 0.4, dt) : want;
       if (want === 0 && rig.rev < 1e-3) rig.rev = 0;
-      return rig.rev * (1 - smoothstep(1, 5, k.u));
+      return rig.rev * (1 - smoothstep(0.5, 6, k.u));
     }
     function roadTurn(k, dist) {
       const along = Math.cos(k.th - k.trTh);
@@ -9322,34 +9323,41 @@ void main(){
       const c = Math.cos(k.th), s = Math.sin(k.th);
       const vx = k.u * c - k.v * s, vz = -k.u * s - k.v * c;
       const want = k.th + clamp(wrapAngle(Math.atan2(-vz, vx) - k.th), -0.7, 0.7) * 0.55 * smoothstep(2, 7, fwd);
-      const rev = backing(k, dt), B = BACK, q = far ? 1 : 0;
-      const base = far ? 6.4 : 3.75, wantBack = base + sp * 0.03 + clamp(k.ax * 0.04, -0.34, 0.24) + (k.boosting ? 0.25 : 0) + B.back[q] * rev;
+      const rev = backing(k, dt), B = BACK;
+      const base = far ? 6.4 : 3.75, wantBack = base + sp * 0.03 + clamp(k.ax * 0.04, -0.34, 0.24) + (k.boosting ? 0.25 : 0);
       const A = AHEAD[SET.blick], L = A.chase;
-      const wantSide = clamp(k.ay * 0.02, -0.28, 0.28) * (far ? 1.4 : 1) * A.side * (1 - rev);
+      const wantSide = clamp(k.ay * 0.02, -0.28, 0.28) * (far ? 1.4 : 1) * A.side;
+      if (!cam.init) rig.yaw = k.u > 0 ? k.r : 0;
       const wantLook = clamp((L.road ? roadTurn(k, L.d0 + L.d1 * sp) * L.road : 0) + rig.yaw * L.yaw, -L.max, L.max) * smoothstep(1, 5, fwd);
+      const wantFov = (far ? 61 : 64) + 13 * Math.pow(f, 1.6) + (k.boosting ? 7 : 0), wantRoll = clamp(-k.ay * 32e-4, -0.06, 0.06);
       if (!cam.init) {
-        cam.th = want;
+        cam.th = want - (rev > 0 ? 0 : clamp(k.r / (far ? 5 : 7.5), -0.5, 0.5));
         rig.back = wantBack;
         rig.side = wantSide;
         rig.look = wantLook;
         rig.lookV = rig.backV = rig.sideV = 0;
-        rig.yaw = k.u > 0 ? k.r : 0;
+        cam.fov = wantFov;
+        cam.roll = wantRoll;
       }
       {
         const off = wrapAngle(want - cam.th), fast = far ? 5 : 7.5;
-        const over = Math.max(0, Math.abs(off) - B.knee);
-        const slow = Math.min(fast, B.rate + B.pull * over * over / Math.max(Math.abs(off), 1e-3));
-        cam.th += off * (1 - Math.exp(-lerp(fast, slow, rev) * dt));
+        let rate = fast;
+        if (rev > 0) {
+          const over = Math.max(0, Math.abs(off) - B.knee);
+          const slow = Math.min(fast, B.rate + B.pull * over * over / Math.max(Math.abs(off), 1e-3));
+          rate = Math.pow(slow, rev) * Math.pow(fast, 1 - rev);
+        }
+        cam.th += off * (1 - Math.exp(-rate * dt));
       }
       spring(rig, "back", "backV", wantBack, 4.5, dt);
       spring(rig, "side", "sideV", wantSide, 4, dt);
       rig.yaw = damp(rig.yaw, k.u > 0 ? k.r : 0, 6, dt);
       spring(rig, "look", "lookV", wantLook, 6, dt);
-      const up = (far ? 2.6 : 1.4) - 0.1 * Math.min(f, 1) + B.up[q] * rev;
+      const up = (far ? 2.6 : 1.4) - 0.1 * Math.min(f, 1);
       const fxx = Math.cos(cam.th), fzz = -Math.sin(cam.th);
       const px = k.x - fxx * rig.back - fzz * rig.side, pz = k.z - fzz * rig.back + fxx * rig.side;
       const py = surfaceY(px, pz, k.idx) + up;
-      const la = cam.th + rig.look, ahead = (far ? 7 : 5.5) - B.near[q] * rev;
+      const la = cam.th + rig.look, ahead = far ? 7 : 5.5;
       const ax = k.x + Math.cos(la) * ahead, az = k.z - Math.sin(la) * ahead;
       const ay = surfaceY(ax, az, k.idx) + (far ? 0.4 : 0.55);
       if (!cam.init) {
@@ -9363,8 +9371,8 @@ void main(){
       cam.lx = ax;
       cam.lz = az;
       cam.ly = damp(cam.ly, ay, 12, dt);
-      cam.fov = damp(cam.fov, (far ? 61 : 64) + 13 * Math.pow(f, 1.6) + (k.boosting ? 7 : 0), 5, dt);
-      cam.roll = damp(cam.roll, clamp(-k.ay * 32e-4, -0.06, 0.06), 6, dt);
+      cam.fov = damp(cam.fov, wantFov, 5, dt);
+      cam.roll = damp(cam.roll, wantRoll, 6, dt);
     }
     function onboardCam(k, dt, model) {
       const sp = Math.abs(k.u), f = clamp(sp / 22, 0, 1.2);
@@ -9396,21 +9404,31 @@ void main(){
     function seatCam(k, dt, model) {
       const sp = Math.abs(k.u), f = clamp(sp / 22, 0, 1.2), S = SEAT;
       const L = AHEAD[SET.blick].seat;
+      if (!cam.init) rig.yaw = k.u > 0 ? k.r : 0;
       const wantLook = clamp((L.road ? roadTurn(k, L.d0 + L.d1 * sp) * L.road : 0) + rig.yaw * L.yaw, -L.max, L.max) * smoothstep(0.5, 4, Math.max(k.u, 0));
+      const W = S.w, z = S.z, wantNod = clamp(-k.ax * S.nod, -S.nodMax[0], S.nodMax[1]);
+      const wantHx = clamp(-k.ax * S.fwd, -S.fwdMax[0], S.fwdMax[1]), wantHz = clamp(k.ay * S.side, -S.sideMax, S.sideMax);
+      const wantHy = clamp((1 - (k.load || 1)) * S.up / 0.7, -S.up, S.up);
+      const wantTilt = clamp(-k.ay * S.lean, -S.leanMax, S.leanMax);
+      const wantFov = 75 + 12 * Math.pow(f, 1.6) + (k.boosting ? 6 : 0);
       if (!cam.init) {
         rig.look = wantLook;
-        rig.lookV = rig.hx = rig.hxV = rig.hz = rig.hzV = rig.nod = rig.nodV = rig.hy = rig.hyV = rig.tilt = rig.tiltV = 0;
-        rig.yaw = k.u > 0 ? k.r : 0;
+        rig.lookV = rig.hxV = rig.hzV = rig.nodV = rig.hyV = rig.tiltV = 0;
+        rig.hx = wantHx;
+        rig.hz = wantHz;
+        rig.nod = wantNod;
+        rig.hy = wantHy;
+        rig.tilt = wantTilt;
+        cam.fov = wantFov;
       }
       rig.yaw = damp(rig.yaw, k.u > 0 ? k.r : 0, S.turn, dt);
       spring(rig, "look", "lookV", wantLook, 6, dt);
-      const W = S.w, z = S.z, wantNod = clamp(-k.ax * S.nod, -S.nodMax[0], S.nodMax[1]);
-      spring(rig, "hx", "hxV", clamp(-k.ax * S.fwd, -S.fwdMax[0], S.fwdMax[1]), W[0], dt, z);
-      spring(rig, "hz", "hzV", clamp(k.ay * S.side, -S.sideMax, S.sideMax), W[1], dt, z);
+      spring(rig, "hx", "hxV", wantHx, W[0], dt, z);
+      spring(rig, "hz", "hzV", wantHz, W[1], dt, z);
       if (z < 1) {
         spring(rig, "nod", "nodV", wantNod, W[0], dt, z);
-        spring(rig, "hy", "hyV", clamp((1 - (k.load || 1)) * S.up / 0.7, -S.up, S.up), W[2], dt, z);
-        spring(rig, "tilt", "tiltV", clamp(-k.ay * S.lean, -S.leanMax, S.leanMax), W[1], dt, z);
+        spring(rig, "hy", "hyV", wantHy, W[2], dt, z);
+        spring(rig, "tilt", "tiltV", wantTilt, W[1], dt, z);
       } else {
         rig.nod = damp(rig.nod, wantNod, 5, dt);
         rig.hy = rig.tilt = 0;
@@ -9427,7 +9445,7 @@ void main(){
       cam.ly = _v2.y;
       cam.lz = _v2.z;
       cam.init = true;
-      cam.fov = damp(cam.fov, 75 + 12 * Math.pow(f, 1.6) + (k.boosting ? 6 : 0), 5, dt);
+      cam.fov = damp(cam.fov, wantFov, 5, dt);
       const e = M.elements, up = Math.asin(clamp(e[9] / Math.hypot(e[8], e[9], e[10]), -1, 1));
       cam.roll = (up + sh[0]) * (1 - S.level) - sh[0] * S.head + rig.tilt;
     }
