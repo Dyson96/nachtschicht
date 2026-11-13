@@ -1,0 +1,14 @@
+Nachtschicht Grand Prix
+(c) 2026. Alle Rechte vorbehalten.
+
+Programmcode, Gestaltung, Modelle und Texturen dieses Spiels duerfen ohne schriftliche
+Erlaubnis des Rechteinhabers nicht kopiert, veraendert, weiterverbreitet, auf anderen
+Seiten angeboten oder in andere Seiten eingebettet werden. Das Ansehen und Spielen auf
+der Seite des Rechteinhabers ist erlaubt.
+
+Bestandteile Dritter stehen unter ihren eigenen Lizenzen:
+- three.js (MIT-Lizenz)
+- Schriften Chakra Petch und Tourney (SIL Open Font License), geladen von Google Fonts
+- gescannte Oberflaechen und Objekte von Poly Haven (CC0)
+- Geraeusche von freesound.org (CC0) und Musik (CC BY, CC BY-NC: nur nicht-kommerzielle
+  Nutzung): siehe CREDITS.md
