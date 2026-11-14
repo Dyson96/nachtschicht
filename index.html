@@ -5,7 +5,7 @@
 <!-- Nachtschicht Grand Prix. (c) 2026. Alle Rechte vorbehalten. Kopieren, Veraendern, Weiterverbreiten und Einbetten nur mit schriftlicher Erlaubnis; siehe LICENSE.txt. -->
 <meta name="robots" content="noindex, nofollow">
 <script>(function(){var ok=["dyson96.github.io"],h=location.hostname,loc=h===""||h==="localhost"||h==="127.0.0.1"||h==="[::1]"||/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(h)||/\.local$/.test(h),own=loc||!ok.length||ok.indexOf(h)>=0,fr=false;try{fr=window.top!==window.self}catch(e){fr=true}if(!own||(fr&&!loc)){window.__LOCK=1;document.write('<meta charset="utf-8"><body style="margin:0;background:#050409;color:#ccd;font:16px/1.5 sans-serif;display:grid;place-items:center;height:100vh;text-align:center"><p>Nachtschicht Grand Prix l\u00e4uft nur auf seiner eigenen Adresse.<br><a style="color:#ff4fa0" href="https://dyson96.github.io/nachtschicht/">Zum Spiel</a></p></body>');document.close();if(window.stop)window.stop();}})();</script>
-<script>window.__BUILD="14.11.2026 04:45";</script>
+<script>window.__BUILD="14.11.2026 07:36";</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -2129,7 +2129,7 @@ body.touch .keys { display: none; }
       this.formed = false;
       this.parkedAll = false;
       this.pitOut = false;
-      this.released = false;
+      this.pitHold = false;
       for (const k of this.karts) {
         const p = tr.project(k.x, k.z, k.idx, k._p, tr.N >> 1);
         k.idx = p.i;
@@ -2189,6 +2189,12 @@ body.touch .keys { display: none; }
     }
     pitStep(dt) {
       const tr = this.track, L = tr.L, P = this.player, auto = !!this.autoPlayer, inn = this.pitMode === "in", lz = this.pit.lane;
+      if (this.pitHold) {
+        this.pitT = 0;
+        this.pitOut = false;
+        if (P) P.hold = true;
+        return;
+      }
       this.pitT += dt;
       let allSet = true, lane = false;
       const inPit = (k) => k.z > 31.7 && k.x > -47 && k.x < 21;
@@ -8396,6 +8402,355 @@ void main(){
       scene.add(m.frame);
       models.push(m);
     }
+    const FIG = (() => {
+      const B = [
+        [0, 0.94, 0, -1], [0.005, 1.2, 0, 0], [0, 1.5, 0, 1],
+        [0, 1.42, -0.2, 1], [0, 1.13, -0.235, 3], [0.02, 0.87, -0.245, 4],
+        [0, 1.42, 0.2, 1], [0, 1.13, 0.235, 6], [0.02, 0.87, 0.245, 7],
+        [0, 0.92, -0.095, 0], [0.01, 0.5, -0.1, 9], [-0.01, 0.085, -0.1, 10],
+        [0, 0.92, 0.095, 0], [0.01, 0.5, 0.1, 12], [-0.01, 0.085, 0.1, 13]
+      ];
+      const pos = [], bone = [], wgt = [], mix = [], idx = [], shade = [];
+      const tube = (rings, seg, sq = 1) => {
+        const o = pos.length / 3, tint = (r, a) => typeof r[12] === "function" ? r[12](a) : r[12];
+        for (const r of rings) for (let k = 0; k < seg; k++) {
+          const a = k / seg * TAU;
+          let c = Math.cos(a), sn = Math.sin(a);
+          c = Math.sign(c) * Math.pow(Math.abs(c), sq);
+          sn = Math.sign(sn) * Math.pow(Math.abs(sn), sq);
+          const ox = r[3] * c + r[6] * sn, oy = r[4] * c + r[7] * sn, oz = r[5] * c + r[8] * sn, ol = Math.hypot(ox, oy, oz) || 1;
+          pos.push(r[0] + ox, r[1] + oy, r[2] + oz);
+          bone.push(r[9], r[10]);
+          wgt.push(r[11]);
+          mix.push(tint(r, a));
+          const lim = Math.abs(r[2]) > 0.05, inward = lim ? Math.max(0, -Math.sign(r[2]) * oz / ol) : r[1] > 0.95 && r[1] < 1.42 ? Math.pow(Math.abs(oz / ol), 4) * 0.8 : 0;
+          shade.push(1 - 0.36 * inward);
+        }
+        for (let i = 0; i < rings.length - 1; i++) for (let k = 0; k < seg; k++) {
+          const a = o + i * seg + k, b = o + i * seg + (k + 1) % seg;
+          idx.push(a, b, a + seg, b, b + seg, a + seg);
+        }
+        for (const end of [0, rings.length - 1]) {
+          const r = rings[end], ci = pos.length / 3;
+          pos.push(r[0], r[1], r[2]);
+          bone.push(r[9], r[10]);
+          wgt.push(r[11]);
+          mix.push(tint(r, 0));
+          shade.push(0.8);
+          for (let k = 0; k < seg; k++) {
+            const a = o + end * seg + k, b = o + end * seg + (k + 1) % seg;
+            if (end) idx.push(ci, a, b);
+            else idx.push(ci, b, a);
+          }
+        }
+      };
+      const SUIT = 1, DARK = 0;
+      const lerp3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+      const side = (a) => Math.abs(Math.sin(a)) > 0.968 ? 0.12 : SUIT;
+      const belt = (y) => (a) => Math.abs(y - 1.02) < 0.03 ? 0.05 : side(a);
+      tube([[0.82, 0.13, 0.1, 1], [0.9, 0.18, 0.128, 1], [0.99, 0.176, 0.126, 0.9], [1.05, 0.166, 0.12, 0.6], [1.13, 0.168, 0.122, 0.3], [1.22, 0.18, 0.128, 0.05],
+        [1.31, 0.192, 0.132, 0], [1.39, 0.196, 0.124, 0], [1.45, 0.158, 0.104, 0], [1.49, 0.078, 0.074, 0], [1.54, 0.064, 0.064, 0]]
+        .map((r, i) => [0.006 * Math.min(i, 5), r[0], 0, r[2], 0, 0, 0, 0, -r[1], 0, 1, r[3], i > 8 ? DARK : belt(r[0])]), 16, 0.8);
+      for (const sg of [-1, 1]) {
+        const o = sg < 0 ? 3 : 6, S = B[o], E = B[o + 1], W = B[o + 2];
+        const stripe = (a) => Math.cos(a - (sg < 0 ? -Math.PI / 2 : Math.PI / 2)) > 0.93 ? 0.1 : SUIT;
+        const arm = (c, r, a, b, w, t = stripe) => [c[0], c[1], c[2], r, 0, 0, 0, 0, r, a, b, w, t];
+        tube([arm([S[0], S[1] + 0.04, S[2] - sg * 0.02], 0.045, 1, o, 0.6), arm(S, 0.07, o, 1, 0.75), arm(lerp3(S, E, 0.3), 0.065, o, o, 1), arm(lerp3(S, E, 0.7), 0.059, o, o, 1),
+          arm(lerp3(S, E, 0.87), 0.056, o, o + 1, 0.75), arm(E, 0.055, o, o + 1, 0.5), arm(lerp3(E, W, 0.14), 0.054, o, o + 1, 0.25), arm(lerp3(E, W, 0.5), 0.051, o + 1, o + 1, 1),
+          arm(lerp3(E, W, 0.86), 0.044, o + 1, o + 1, 1), arm(lerp3(E, W, 0.93), 0.043, o + 1, o + 1, 1, DARK), arm(W, 0.04, o + 1, o + 2, 0.5, DARK)], 10);
+        const hand = (dy, ru, rv) => [W[0] + 0.004, W[1] - dy, W[2], ru, 0, 0, 0, 0, rv, o + 2, o + 2, 1, DARK];
+        tube([hand(-0.025, 0.045, 0.042), hand(0.03, 0.054, 0.033), hand(0.095, 0.054, 0.029), hand(0.16, 0.043, 0.024), hand(0.19, 0.024, 0.016)], 8);
+        const q = sg < 0 ? 9 : 12, H = B[q], K = B[q + 1], A = B[q + 2];
+        const leg = (c, ru, rv, a, b, w) => [c[0], c[1], c[2], ru, 0, 0, 0, 0, rv, a, b, w, SUIT];
+        tube([leg([H[0], H[1] + 0.06, H[2]], 0.08, 0.078, 0, q, 0.7), leg([H[0], H[1] - 0.03, H[2]], 0.104, 0.093, q, 0, 0.7), leg(lerp3(H, K, 0.35), 0.094, 0.088, q, q, 1), leg(lerp3(H, K, 0.7), 0.08, 0.076, q, q, 1),
+          leg(lerp3(H, K, 0.88), 0.072, 0.069, q, q + 1, 0.75), leg(K, 0.07, 0.067, q, q + 1, 0.5), leg(lerp3(K, A, 0.12), 0.068, 0.065, q, q + 1, 0.25), leg(lerp3(K, A, 0.35), 0.07, 0.063, q + 1, q + 1, 1),
+          leg(lerp3(K, A, 0.75), 0.059, 0.055, q + 1, q + 1, 1), leg([A[0], A[1] + 0.06, A[2]], 0.054, 0.051, q + 1, q + 2, 0.5)], 10);
+        tube([[A[0], A[1] + 0.1, A[2], 0.056, 0, 0, 0, 0, 0.053, q + 2, q + 1, 0.6, DARK], [A[0], A[1] - 0.01, A[2], 0.054, 0, 0, 0, 0, 0.051, q + 2, q + 2, 1, DARK]], 10);
+        const sole = pos.length / 3;
+        tube([[-0.085, 0.05, 0.042], [-0.045, 0.066, 0.053], [0.04, 0.058, 0.056], [0.13, 0.046, 0.055], [0.19, 0.032, 0.046], [0.22, 0.016, 0.026]]
+          .map((r) => [A[0] + r[0], Math.max(r[1], 0.03), A[2], 0, r[1], 0, 0, 0, r[2], q + 2, q + 2, 1, DARK]), 10);
+        for (let i = sole; i < pos.length / 3; i++) pos[i * 3 + 1] = Math.max(pos[i * 3 + 1], 0.004);
+      }
+      let geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+      geo.setIndex(idx);
+      geo.computeVertexNormals();
+      {
+        const n = geo.attributes.normal;
+        if (n.getX(0) * (pos[0] - 0) + n.getZ(0) * pos[2] < 0) {
+          for (let i = 0; i < idx.length; i += 3) {
+            const t = idx[i + 1];
+            idx[i + 1] = idx[i + 2];
+            idx[i + 2] = t;
+          }
+          geo.setIndex(idx);
+          geo.computeVertexNormals();
+        }
+      }
+      geo.setAttribute("aBone", new THREE.Float32BufferAttribute(bone, 2));
+      geo.setAttribute("aW", new THREE.Float32BufferAttribute(wgt, 1));
+      geo.setAttribute("aMix", new THREE.Float32BufferAttribute(mix, 1));
+      geo.setAttribute("aShade", new THREE.Float32BufferAttribute(shade, 1));
+      const material = (suit) => new THREE.ShaderMaterial({
+        uniforms: Object.assign(THREE.UniformsUtils.clone(THREE.UniformsLib.fog), {
+          uB: { value: B.map(() => new THREE.Matrix4()) }, uL: { value: [0, 1, 2, 3, 4].map(() => new THREE.Vector3(0.2, 0.2, 0.25)) },
+          uSuit: { value: new THREE.Vector3(suit[0], suit[1], suit[2]) }, uGain: { value: 1.5 }
+        }),
+        fog: true,
+        vertexShader: (
+          
+          `
+          attribute vec2 aBone; attribute float aW; attribute float aMix; attribute float aShade;
+          uniform mat4 uB[15];
+          varying vec3 vN; varying vec3 vP; varying float vMix; varying float vShade;
+          #include <fog_pars_vertex>
+          void main(){
+            mat4 m0 = uB[int(aBone.x + 0.5)], m1 = uB[int(aBone.y + 0.5)];
+            vec4 p = m0*vec4(position, 1.0)*aW + m1*vec4(position, 1.0)*(1.0 - aW);
+            vN = (m0*vec4(normal, 0.0)).xyz*aW + (m1*vec4(normal, 0.0)).xyz*(1.0 - aW);
+            vP = p.xyz;
+            vMix = aMix;
+            vShade = aShade;
+            vec4 mvPosition = viewMatrix*p;
+            gl_Position = projectionMatrix*mvPosition;
+            #include <fog_vertex>
+          }`
+        ),
+        fragmentShader: (
+          
+          `
+          uniform vec3 uL[5]; uniform vec3 uSuit; uniform float uGain;
+          varying vec3 vN; varying vec3 vP; varying float vMix; varying float vShade;
+          #include <fog_pars_fragment>
+          void main(){
+            vec3 n = normalize(vN), w = n*n;
+            vec3 L = ((n.x > 0.0 ? uL[0] : uL[1])*w.x + (n.z > 0.0 ? uL[2] : uL[3])*w.z)*0.8 + uL[4]*(n.y > 0.0 ? w.y + 0.3*(1.0 - w.y)*max(n.y + 0.4, 0.0) : 0.25*w.y);
+            L *= vShade*(0.7 + 0.3*smoothstep(0.0, 1.3, vP.y));
+            vec3 alb = mix(vec3(0.012, 0.012, 0.015), uSuit, vMix);
+            float rim = pow(1.0 - max(dot(n, normalize(cameraPosition - vP)), 0.0), 3.0);
+            gl_FragColor = vec4(alb*(L*uGain + 0.012) + L*rim*0.03, 1.0);
+            #include <fog_fragment>
+          }`
+        )
+      });
+      const blob = new THREE.CircleGeometry(0.5, 20);
+      const blobMat = new THREE.ShaderMaterial({
+        transparent: true, depthWrite: false,
+        vertexShader: "varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position, 1.0); }",
+        fragmentShader: "varying vec2 vUv; void main(){ float r = length(vUv - 0.5)*2.0; gl_FragColor = vec4(0.0, 0.0, 0.0, 0.5*(1.0 - smoothstep(0.15, 1.0, r))); }"
+      });
+      return { B, geo, material, blob, blobMat };
+    })();
+    function makeFigure(i) {
+      const model = models[i], M = model.main;
+      const root = new THREE.Group(), bones = FIG.B.map(() => new THREE.Group());
+      FIG.B.forEach((b, q) => {
+        const par = b[3] < 0 ? null : FIG.B[b[3]];
+        bones[q].position.set(b[0] - (par ? par[0] : 0), b[1] - (par ? par[1] : 0), b[2] - (par ? par[2] : 0));
+        (par ? bones[b[3]] : root).add(bones[q]);
+      });
+      const nk = [M.lean.position.x + M.neck.position.x, M.lean.position.y + M.neck.position.y, M.lean.position.z + M.neck.position.z];
+      const helm = new THREE.Group();
+      for (const c of M.helmet.children) helm.add(new THREE.Mesh(c.geometry, c.material));
+      helm.position.set(-nk[0], -nk[1] + 0.02, -nk[2]);
+      bones[2].add(helm);
+      const mat = FIG.material(lin(model.driver.color, 0.3));
+      const mesh = new THREE.Mesh(FIG.geo, mat);
+      mesh.frustumCulled = false;
+      const shadow = new THREE.Mesh(FIG.blob, FIG.blobMat);
+      shadow.rotation.x = -Math.PI / 2;
+      shadow.renderOrder = 2;
+      root.visible = mesh.visible = shadow.visible = false;
+      scene.add(root, mesh, shadow);
+      const rest = FIG.B.map((b) => new THREE.Matrix4().makeTranslation(-b[0], -b[1], -b[2]));
+      return { i, root, bones, mesh, mat, rest, shadow, x: 0, z: 0, y: 0, th: 0, v: 0, phase: i * 1.7, crouch: 0, state: "off", path: null, pi: 0, t: 0, wait: 0, seed: i * 2.3, lit: 0, speed: 1.9 };
+    }
+    function poseFigure(f, dt, time) {
+      const b = f.bones, a = clamp(f.v / 2.1, 0, 1.3), s = Math.sin(f.phase), c = Math.cos(f.phase), u = f.crouch;
+      const A = 0.46 * a, idle = 1 - Math.min(a * 3, 1);
+      b[0].position.y = 0.94 + 0.016 * a * Math.cos(2 * f.phase) - 0.5 * u;
+      b[0].position.x = -0.1 * u;
+      b[0].rotation.set(0.035 * a * s + 0.02 * idle * Math.sin(time * 0.5 + f.seed), 0.05 * a * s, -0.12 * u);
+      b[1].rotation.set(0, -0.1 * a * s, -0.02 * a - 0.2 * u + 0.008 * idle * Math.sin(time * 1.3 + f.seed));
+      b[2].rotation.set(0, 0.05 * a * s, 0.16 * u);
+      for (const sg of [-1, 1]) {
+        const q = sg < 0 ? 9 : 12, o = sg < 0 ? 3 : 6, sw = sg < 0 ? s : -s, lift = sg < 0 ? c : -c;
+        const thigh = A * sw + 1.3 * u, shin = -(0.1 * a + 0.9 * a * Math.max(0, lift) + 1.95 * u);
+        b[q].rotation.set(0, 0, thigh);
+        b[q + 1].rotation.set(0, 0, shin);
+        b[q + 2].rotation.set(0, 0, -(thigh + shin) * 0.75 + 0.12 * u);
+        b[o].rotation.set(-sg * 0.075, 0, -0.62 * A * sw + 0.5 * u);
+        b[o + 1].rotation.set(0, 0, 0.16 + 0.28 * a * Math.max(0, -sw) + 0.14 * a + 0.5 * u);
+        b[o + 2].rotation.set(0, 0, 0.08);
+      }
+      f.root.position.set(f.x, f.y, f.z);
+      f.shadow.position.set(f.x - Math.cos(f.th) * 0.1 * u, f.y + 0.012, f.z + Math.sin(f.th) * 0.1 * u);
+      f.root.rotation.y = f.th;
+      f.root.updateMatrixWorld(true);
+      const U = f.mat.uniforms.uB.value;
+      for (let q = 0; q < b.length; q++) U[q].multiplyMatrices(b[q].matrixWorld, f.rest[q]);
+      if ((f.lit -= dt) <= 0) {
+        f.lit = 0.12 + (f.i % 4) * 0.01;
+        const L = f.mat.uniforms.uL.value, o = lightOut;
+        for (let q = 0; q < 5; q++) {
+          world.field.sample(f.x, f.y + 1.1, f.z, q === 0 ? 1 : q === 1 ? -1 : 0, q === 4 ? 1 : 0, q === 2 ? 1 : q === 3 ? -1 : 0, o);
+          L[q].set(o[0], o[1], o[2]);
+        }
+      }
+    }
+    const crew = { list: [], on: false, called: false, armed: false };
+    const CREW = {
+      brief: [[-21.3, 50.3], [-20.2, 52.6], [-21.4, 54.6], [-12.3, 50.2], [-11.4, 52.8], [-12.4, 55], [-17.7, 49.6]],
+      store: (j) => [-34.4 + j * 1.75, 55.5]
+    };
+    const crewFigure = (i) => crew.list[i - 1] || (crew.list[i - 1] = makeFigure(i));
+    const kartSide = (k, d) => [k.x + Math.sin(k.th) * d, k.z + Math.cos(k.th) * d];
+    function crewShow(f, on) {
+      f.root.visible = f.mesh.visible = f.shadow.visible = on;
+    }
+    function crewHide() {
+      crew.on = crew.called = false;
+      for (const f of crew.list) if (f) {
+        crewShow(f, false);
+        f.state = "off";
+      }
+      for (let i = 0; i < models.length; i++) models[i].setDriver(true);
+    }
+    function crewInit() {
+      crew.on = !!hallAsset && !!models[1].main.helmet && !!models[1].main.neck;
+      crew.called = false;
+      crew.armed = true;
+      if (!crew.on) return;
+      for (let i = 1; i < race.karts.length; i++) {
+        const f = crewFigure(i), sp = CREW.brief[(i - 1) % CREW.brief.length];
+        models[i].setDriver(false);
+        f.x = sp[0];
+        f.z = sp[1];
+        f.y = 0;
+        f.th = (i * 37 % 7 - 3) * 0.09;
+        f.v = f.crouch = 0;
+        f.state = "wait";
+        f.path = null;
+        crewShow(f, true);
+      }
+      for (let i = race.karts.length; i <= crew.list.length; i++) if (crew.list[i - 1]) crewShow(crew.list[i - 1], false);
+    }
+    function crewGo(f, pts, then) {
+      f.path = pts;
+      f.pi = 0;
+      f.state = "walk";
+      f.then = then;
+    }
+    const crossAt = (k) => {
+      let x = k.x - 2;
+      const post = SITE.X0 + 1 + Math.round((x - SITE.X0 - 1) / 6) * 6;
+      if (Math.abs(x - post) < 0.5) x = post + (x < post ? -0.6 : 0.6);
+      return x;
+    };
+    function crewCall(force) {
+      if (!crew.on) return;
+      if (!force) {
+        if (crew.called) return;
+        for (let i = 1; i < race.karts.length; i++) if (crewFigure(i).state !== "wait") return;
+      }
+      crew.called = true;
+      const order = [];
+      for (let i = 1; i < race.karts.length; i++) order.push(i);
+      order.sort((a, b) => Math.hypot(crewFigure(a).x + 12, crewFigure(a).z - 46) - Math.hypot(crewFigure(b).x + 12, crewFigure(b).z - 46));
+      let turn = 0;
+      for (const i of order) {
+        const f = crewFigure(i), k = race.karts[i], pts = [], lane = 44.55 + (i % 3) * 0.3;
+        if (f.state === "seated" || f.state === "enter" || f.state === "walk" && f.then === "enter") continue;
+        if (f.z > 46.3) {
+          if (f.x < -23.4) pts.push([-24.6, 47.5 + (i % 3) * 0.3]);
+          pts.push([-13.8, 47.4 + (i % 3) * 0.35], [-12, 46.4], [-12, 45.1]);
+        }
+        const side = kartSide(k, 1.05);
+        pts.push([crossAt(k), lane], side);
+        crewGo(f, pts, "enter");
+        f.wait = turn++ * (force ? 0.8 : 1.25);
+        f.speed = force ? 2.9 : 1.9;
+      }
+    }
+    function crewOut(i) {
+      const f = crewFigure(i), k = race.karts[i], side = kartSide(k, 1.05), sp = CREW.store(i - 1);
+      models[i].setDriver(false);
+      f.x = k.x - Math.cos(k.th) * 0.2;
+      f.z = k.z + Math.sin(k.th) * 0.2;
+      f.th = k.th;
+      f.crouch = 1;
+      f.t = 0;
+      f.from = [f.x, f.z];
+      f.to = side;
+      f.state = "exit";
+      f.wait = 0;
+      f.next = [[crossAt(k), 44.55 + (i % 3) * 0.3], [-29, 45], [-29, 46.6], [-29 + (i % 3 - 1) * 0.5, 48.4], sp];
+      f.speed = 1.9;
+      crewShow(f, true);
+    }
+    const crewSeated = () => {
+      if (!crew.on) return true;
+      for (let i = 1; i < race.karts.length; i++) if (crewFigure(i).state !== "seated") return false;
+      return true;
+    };
+    function crewUpdate(dt, time) {
+      if (!crew.on) return;
+      for (let i = 1; i < race.karts.length; i++) {
+        const f = crewFigure(i), k = race.karts[i];
+        if (f.state === "off" || f.state === "seated") {
+          if (f.state === "seated" && race.state === "pit" && race.pitMode === "in" && k.set && (f.t += dt) > 1 + (i % 3) * 0.5) crewOut(i);
+          continue;
+        }
+        f.v = 0;
+        if (f.state === "walk") {
+          f.crouch = Math.max(0, f.crouch - dt * 2.5);
+          if (f.wait > 0) f.wait -= dt;
+          else {
+            const q = f.path[f.pi], dx = q[0] - f.x, dz = q[1] - f.z, d = Math.hypot(dx, dz);
+            if (d < 0.18) {
+              if (++f.pi >= f.path.length) {
+                if (f.then === "enter") {
+                  f.state = "enter";
+                  f.t = 0;
+                  f.from = [f.x, f.z];
+                  f.to = [k.x - Math.cos(k.th) * 0.2, k.z + Math.sin(k.th) * 0.2];
+                } else {
+                  f.state = "wait";
+                  f.face = -Math.PI / 2;
+                }
+              }
+            } else {
+              const want = Math.atan2(-dz, dx), turn = wrapAngle(want - f.th);
+              f.th += clamp(turn, -5 * dt, 5 * dt);
+              f.v = f.speed * clamp(1.4 - Math.abs(turn), 0.25, 1) * Math.min(1, d / 0.4 + 0.3);
+              const st = Math.min(f.v * dt, d);
+              f.x += Math.cos(f.th) * st;
+              f.z -= Math.sin(f.th) * st;
+              f.phase += st * (TAU / 1.45);
+            }
+          }
+        } else if (f.state === "enter" || f.state === "exit") {
+          f.t += dt / 0.95;
+          const w = smoothstep(0, 1, f.t);
+          f.x = lerp(f.from[0], f.to[0], w);
+          f.z = lerp(f.from[1], f.to[1], w);
+          if (f.state === "enter") {
+            f.crouch = w;
+            f.th += clamp(wrapAngle(k.th - f.th), -4 * dt, 4 * dt);
+            if (f.t >= 1) {
+              f.state = "seated";
+              f.t = 0;
+              crewShow(f, false);
+              models[i].setDriver(true);
+            }
+          } else {
+            f.crouch = 1 - w;
+            if (f.t >= 1) crewGo(f, f.next, "wait");
+          }
+        } else if (f.face !== undefined) f.th += clamp(wrapAngle(f.face - f.th), -3 * dt, 3 * dt);
+        poseFigure(f, dt, time);
+      }
+    }
     const G2 = {
       state: "menu",
       paused: false,
@@ -8646,7 +9001,7 @@ void main(){
       G2.visit = false;
       G2.blend = null;
       setPit(false, false, false);
-      models[0].setDriver(true);
+      crewHide();
       document.body.classList.remove("walking");
       race.setup({ opponents: 5, laps: 99, level: 1, demo: true, seed: 2 + Math.floor(Math.random() * 50) });
       race.scatter();
@@ -8702,7 +9057,7 @@ void main(){
       race.setup({ opponents: SET.opp, laps: SET.laps, level: SET.level, demo: false, seed: 1 + Math.floor(Math.random() * 1e3) });
       race.player.assist = 0;
       showKarts();
-      models[0].setDriver(true);
+      crewHide();
       document.body.classList.remove("walking");
       G2.blend = null;
       setPit(false, false, false);
@@ -8915,6 +9270,7 @@ void main(){
       audio.init();
       audio.setMuted(ui.muted());
       parkKarts();
+      crewInit();
       G2.blend = null;
       setPit(false, false, false);
       fx.clearSkids();
@@ -8970,6 +9326,7 @@ void main(){
     }
     function footAct() {
       if (G2.state !== "foot" || G2.paused || foot.busy || !foot.near) return;
+      crewCall(true);
       foot.busy = 1e-3;
       footHint();
     }
@@ -9010,7 +9367,9 @@ void main(){
         k.th = bb.th;
       }
       race.pitBegin(SITE.pit);
-      setPit(true, true, false);
+      crewCall(true);
+      race.pitHold = !crewSeated();
+      setPit(true, !race.pitHold, false);
       G2.state = "outlap";
       G2.visit = true;
       G2.finishT = 0;
@@ -9020,8 +9379,13 @@ void main(){
       audio.show = 1;
       hud.show(true);
       hud.lights(0, false);
-      hud.message("Boxenausfahrt offen", "", 2.6);
-      note((DEVICE.touch ? "R\xFCckw\xE4rts aus der Box (Bremse halten)" : "R\xFCckw\xE4rts aus der Box (S oder \u2193)") + ", dann eine Runde zu Startbox " + (race.player.slot + 1));
+      const how = (DEVICE.touch ? "R\xFCckw\xE4rts aus der Box (Bremse halten)" : "R\xFCckw\xE4rts aus der Box (S oder \u2193)") + ", dann eine Runde zu Startbox " + (race.player.slot + 1);
+      G2.outHow = how;
+      if (race.pitHold) hud.message("Die anderen steigen ein", "", 2.6);
+      else {
+        hud.message("Boxenausfahrt offen", "", 2.6);
+        note(how);
+      }
       const k = race.player;
       slotMark.position.set(k.gx, 0, k.gz);
       slotMark.rotation.y = 0;
@@ -9042,6 +9406,7 @@ void main(){
     }
     function startInlap() {
       race.pitIn(SITE.pit, bay);
+      crew.called = crew.armed = false;
       G2.state = "inlap";
       hud.message("Zielflagge", "hot", 2.4);
       note("Auslaufrunde: zur\xFCck in die Box, dein Platz ist markiert");
@@ -9174,6 +9539,11 @@ void main(){
           z = track.Z[bi] + (z - track.Z[bi]) / d * R;
         }
         for (const o of world.obstacles) round(o[0], o[1], o[2] + FOOT.r);
+        if (crew.on) {
+          if (z > 46.4) crew.armed = true;
+          else if (crew.armed && !crew.called && z < 45.9 && x > -46 && x < 14) crewCall();
+          for (const f of crew.list) if (f && f.root.visible) round(f.x, f.z, 0.3 + FOOT.r);
+        }
         for (let i = 0; i < race.karts.length; i++) {
           const k = race.karts[i], c = Math.cos(k.th), sn = Math.sin(k.th);
           round(k.x + c * 0.5, k.z - sn * 0.5, 0.55 + FOOT.r);
@@ -9685,7 +10055,15 @@ void main(){
         if (player && (!player.finished || G2.state === "inlap") && G2.state !== "menu" && !afoot && !(race.autoPlayer && laps)) readInput(player);
         if (!afoot || race.state === "pit" && race.pitMode === "in") race.step(dt);
         handleEvents();
+        crewUpdate(dt, G2.time);
         if (G2.state === "outlap") {
+          if (race.pitHold && crewSeated()) {
+            race.pitHold = false;
+            if (!race.autoPlayer) player.hold = false;
+            setPit(true, true, false);
+            hud.message("Boxenausfahrt offen", "", 2.6);
+            note(G2.outHow);
+          }
           if (race.pitOut && PIT.open) setPit(false, false, false);
           if (player && !player.set && G2.outHint === 0) {
             let gap = player.gs - player.s;
@@ -9916,7 +10294,7 @@ void main(){
     $2("m-walk").disabled = false;
     attract();
     requestAnimationFrame(frame);
-    window.__ns = { enterHall, leaveKart, footAct, foot, FOOT, SITE, PIT, setPit, startOutlap, startInlap, getOut, applyLook, LOOKS, G: G2, SET, race, audio, world, cam, camera, renderer, post, scene, track, models, beginRace, attract, setPaused, hud, fx, keys, AIDriver, HULL, HIT, KP, Kart, stepKart, steerLimit, FEELS, setFeel, nextFeel, rig, AHEAD, nextAhead, PHYS, setPhys, SEATS, setSeat, nextSeat, BACK, DEVICE, touch };
+    window.__ns = { crew, crewCall, crewSeated, FIG, enterHall, leaveKart, footAct, foot, FOOT, SITE, PIT, setPit, startOutlap, startInlap, getOut, applyLook, LOOKS, G: G2, SET, race, audio, world, cam, camera, renderer, post, scene, track, models, beginRace, attract, setPaused, hud, fx, keys, AIDriver, HULL, HIT, KP, Kart, stepKart, steerLimit, FEELS, setFeel, nextFeel, rig, AHEAD, nextAhead, PHYS, setPhys, SEATS, setSeat, nextSeat, BACK, DEVICE, touch };
   }
   function buildEnv(renderer) {
     const THREE = window.THREE;
