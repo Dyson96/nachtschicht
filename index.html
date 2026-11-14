@@ -5,7 +5,7 @@
 <!-- Nachtschicht Grand Prix. (c) 2026. Alle Rechte vorbehalten. Kopieren, Veraendern, Weiterverbreiten und Einbetten nur mit schriftlicher Erlaubnis; siehe LICENSE.txt. -->
 <meta name="robots" content="noindex, nofollow">
 <script>(function(){var ok=["dyson96.github.io"],h=location.hostname,loc=h===""||h==="localhost"||h==="127.0.0.1"||h==="[::1]"||/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(h)||/\.local$/.test(h),own=loc||!ok.length||ok.indexOf(h)>=0,fr=false;try{fr=window.top!==window.self}catch(e){fr=true}if(!own||(fr&&!loc)){window.__LOCK=1;document.write('<meta charset="utf-8"><body style="margin:0;background:#050409;color:#ccd;font:16px/1.5 sans-serif;display:grid;place-items:center;height:100vh;text-align:center"><p>Nachtschicht Grand Prix l\u00e4uft nur auf seiner eigenen Adresse.<br><a style="color:#ff4fa0" href="https://dyson96.github.io/nachtschicht/">Zum Spiel</a></p></body>');document.close();if(window.stop)window.stop();}})();</script>
-<script>window.__BUILD="14.11.2026 12:09";</script>
+<script>window.__BUILD="14.11.2026 12:45";</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -405,6 +405,7 @@ body.touch .keys { display: none; }
       <div class="row"><span>Runden</span><div class="seg" id="b-laps"><button type="button" data-v="3">3</button><button type="button" data-v="5">5</button><button type="button" data-v="8">8</button></div></div>
       <div class="row"><span>Gegner</span><div class="seg" id="b-opp"><button type="button" data-v="3">3</button><button type="button" data-v="5">5</button><button type="button" data-v="7">7</button></div></div>
       <div class="row"><span>Niveau</span><div class="seg" id="b-level"><button type="button" data-v="0">Azubi</button><button type="button" data-v="1">Geselle</button><button type="button" data-v="2">Meister</button></div></div>
+      <div class="row"><span>Zeitfahren</span><div class="seg" id="b-quali"><button type="button" data-v="mit">Mit</button><button type="button" data-v="ohne">Ohne</button></div></div>
     </div>
     <div class="acts">
       <button id="b-ok" class="btn main" type="button">Lauf buchen</button>
@@ -2135,8 +2136,10 @@ body.touch .keys { display: none; }
     slotOf(k) {
       return { s: this.track.L - 3.2 - k.slot * 3.4, d: k.slot % 2 === 0 ? -1.7 : 1.7 };
     }
-    pitBegin(pit) {
+    pitBegin(pit, quali) {
       const tr = this.track;
+      this.quali = !!quali;
+      this.qDone = !quali;
       this.state = "pit";
       this.pitMode = "out";
       this.pit = pit;
@@ -2154,6 +2157,10 @@ body.touch .keys { display: none; }
         k.hold = !k.isPlayer || !!this.autoPlayer;
         k.set = false;
         k.prevS = k.s;
+        k.q = 0;
+        k.qS = k.s;
+        k.qStart = 0;
+        k.qTime = Infinity;
         const sl = this.slotOf(k), o = tr.at(sl.s, {});
         k.gs = sl.s;
         k.gd = sl.d;
@@ -2164,7 +2171,7 @@ body.touch .keys { display: none; }
       if (this.autoPlayer && this.player) this.pitDrivers.push(new AIDriver(this.player, tr, this.vref, { skill: 0.9, seed: 5 }));
       for (const d of this.pitDrivers) {
         d.mode = "bay";
-        d.release = 1.2 + d.k.slot * 1.4;
+        d.release = 1.2 + d.k.slot * (quali ? 3.2 : 1.4);
         d.capV = 17;
         d.pi = 0;
         d.idle = 0;
@@ -2202,8 +2209,28 @@ body.touch .keys { display: none; }
         d.resetWanted = false;
       }
     }
+    qualiClose() {
+      const tr = this.track;
+      for (const k of this.karts) if (k.q < 2) {
+        k.q = 2;
+        k.qTime = Infinity;
+      }
+      const order = this.karts.slice().sort((a, b) => a.qTime - b.qTime || a.slot - b.slot);
+      order.forEach((k, i) => {
+        k.slot = i;
+        k.pos = i + 1;
+        const sl = this.slotOf(k), o = tr.at(sl.s, {});
+        k.gs = sl.s;
+        k.gd = sl.d;
+        k.gx = o.x - Math.sin(o.th) * sl.d;
+        k.gz = o.z - Math.cos(o.th) * sl.d;
+        if (k.set) k.place(tr, k.gs, k.gd, 0);
+      });
+      this.order = order;
+      this.qDone = true;
+    }
     pitStep(dt) {
-      const tr = this.track, L = tr.L, P = this.player, auto = !!this.autoPlayer, inn = this.pitMode === "in", lz = this.pit.lane;
+      const tr = this.track, L = tr.L, P = this.player, auto = !!this.autoPlayer, inn = this.pitMode === "in", lz = this.pit.lane, qOn = !!this.quali && !inn;
       if (this.pitHold) {
         this.pitT = 0;
         this.pitOut = false;
@@ -2278,6 +2305,30 @@ body.touch .keys { display: none; }
         k.pitch = k.roll = k.u = k.v = k.r = 0;
         stay(k);
       };
+      if (qOn) {
+        for (const k of this.karts) {
+          const was = k.qS;
+          k.qS = k.s;
+          if (k.hold || k.set || k.q > 1 || inPit(k) || !(was > L * 0.75 && k.s < L * 0.25)) continue;
+          const t = this.pitT - dt + dt * (L - was) / Math.max(1e-6, L - was + k.s);
+          if (k.q === 0) {
+            k.q = 1;
+            k.qStart = t;
+          } else {
+            k.q = 2;
+            k.qTime = t - k.qStart;
+          }
+        }
+        if (!this.qDone) {
+          let close = false, all = true;
+          for (const k of this.karts) {
+            if (k.q < 2) all = false;
+            else if (!inPit(k) && k.s > L - 75 && k.s < L - 30) close = true;
+          }
+          const waitP = P && !auto && !P.set && (P.q === 1 || P.q === 0 && !P.hold && !inPit(P)) && this.pitT < 300;
+          if (all || close && !waitP || this.pitT > 330) this.qualiClose();
+        }
+      }
       for (const d of this.pitDrivers) {
         const k = d.k;
         if (k.set) continue;
@@ -2296,7 +2347,7 @@ body.touch .keys { display: none; }
           k.hold = false;
         }
         d.idle = Math.abs(k.u) < 0.25 ? d.idle + dt : 0;
-        if (d.idle > 9 || this.pitT > d.release + 170) {
+        if (d.idle > 9 || this.pitT > d.release + (qOn ? 330 : 170)) {
           if (inn) park(k);
           else box(k);
           continue;
@@ -2323,21 +2374,30 @@ body.touch .keys { display: none; }
             d.bias = null;
           }
         } else if (d.mode === "lap") {
-          d.capV = gapped(k, 17);
-          d.update(dt, this.karts, this.pitT + 10);
-          if (d.resetWanted) this.putBack(k, d);
+          if (qOn && !this.qDone && k.q === 2 && k.s > L - 105 && k.s < L - 30) {
+            const o = tr.at(k.s + 6, this._po || (this._po = {}));
+            drive(k, o.x - Math.sin(o.th) * 2.6, o.z - Math.cos(o.th) * 2.6, k.s > L - 75 || ahead(k, 5.5) ? 0 : 5);
+            d.idle = 0;
+          } else {
+            d.capV = qOn && k.q === 1 ? 0 : gapped(k, qOn && k.q === 2 ? 14 : 17);
+            d.update(dt, this.karts, this.pitT + 10);
+            if (d.resetWanted) this.putBack(k, d);
+          }
           let gap = k.gs - k.s;
           if (gap < 0) gap += L;
-          if (gap < 24) d.mode = "grid";
+          if (gap < 24 && (!qOn || this.qDone && k.q === 2)) d.mode = "grid";
         } else if (d.mode === "grid") {
           let gap = k.gs - k.s;
           if (gap > L / 2) gap -= L;
           else if (gap < -L / 2) gap += L;
           const far = Math.max(gap, 0), o = tr.at(k.s + 5, this._po || (this._po = {}));
           let dd = k.gd;
-          if (far > 5.5) for (const q of this.karts) if (q !== k && q.set && Math.abs(q.gd - k.gd) < 1 && q.gs > k.s + 1 && q.gs < k.gs - 1) dd = -Math.sign(k.gd) * 0.9;
+          if (far > 5.5) for (const q of this.karts) if (q !== k && q.set && q.gs > k.s + 1 && q.gs < k.gs - 1) {
+            if (qOn) dd = 0;
+            else if (Math.abs(q.gd - k.gd) < 1) dd = -Math.sign(k.gd) * 0.9;
+          }
           const tx = far < 5 ? k.gx : o.x - Math.sin(o.th) * dd, tz = far < 5 ? k.gz : o.z - Math.cos(o.th) * dd;
-          drive(k, tx, tz, ahead(k, 3) ? 0 : Math.min(7, Math.sqrt(2 * 2.2 * Math.max(0, far - 0.25))), far < 1.3);
+          drive(k, tx, tz, ahead(k, 3) ? 0 : Math.min(qOn && dd === 0 ? 4.5 : 7, Math.sqrt(2 * 2.2 * Math.max(0, far - 0.25))), far < 1.3);
           if (far < 0.5 && Math.abs(k.u) < 0.8 || gap < -0.4) box(k);
         } else if (d.mode === "lapin") {
           let toIn = L - 27 - k.s;
@@ -2365,7 +2425,10 @@ body.touch .keys { display: none; }
         if (inPit(P)) lane = true;
         if (inn) {
           if (Math.hypot(P.bx - P.x, P.bz - P.z) < 1.4 && Math.abs(P.u) < 1.2 || this.pitT > 300) park(P);
-        } else if (Math.hypot(P.gx - P.x, P.gz - P.z) < 1.5 && Math.abs(P.u) < 1.3 || this.pitT > 260) box(P);
+        } else if (this.pitT > (qOn ? 420 : 260)) {
+          if (!this.qDone) this.qualiClose();
+          box(P);
+        } else if (this.qDone && Math.hypot(P.gx - P.x, P.gz - P.z) < 1.5 && Math.abs(P.u) < 1.3) box(P);
       }
       this.pitOut = !lane;
       if (allSet) {
@@ -8256,8 +8319,10 @@ void main(){
       if (!player) return;
       this.set("pos", e.pos, String(player.pos || 1));
       this.set("posof", e.posOf, "/" + race.karts.length);
-      this.set("lap", e.lap, "Runde " + clamp(player.lap, 1, race.laps) + "/" + race.laps);
-      const lapT = race.state === "racing" && player.lap >= 1 ? race.time - player.lapStart : race.state === "racing" ? race.time : 0;
+      const pit = race.state === "pit", qq = pit && race.pitMode === "out" && race.quali ? player.q | 0 : -1;
+      this.set("lap", e.lap, !pit ? "Runde " + clamp(player.lap, 1, race.laps) + "/" + race.laps : race.pitMode === "in" ? "Auslaufrunde" : qq === 0 ? "Aufwärmen" : qq === 1 ? "Zeitrunde" : "Zur Startbox");
+      const lapT = qq === 1 ? race.pitT - player.qStart : qq === 2 && isFinite(player.qTime) ? player.qTime
+        : race.state === "racing" && player.lap >= 1 ? race.time - player.lapStart : race.state === "racing" ? race.time : 0;
       this.set("time", e.time, fmtTime(Math.max(1e-4, lapT)).slice(0, -1));
       this.set("best", e.best, isFinite(race.bestLap) ? fmtTime(race.bestLap) : "\u2013:\u2013\u2013.\u2013\u2013\u2013");
       this.set("last", e.last, isFinite(player.last) ? fmtTime(player.last) : "\u2013:\u2013\u2013.\u2013\u2013\u2013");
@@ -8299,7 +8364,7 @@ void main(){
   // src/main.js
   var $2 = (id) => document.getElementById(id);
   var STORE = "nachtschicht.v1";
-  var SET = { laps: 3, opp: 5, level: 0, music: 0.8, sfx: 0.8, gfx: "auto", best: null, cam: 0, licht: "neu", fahr: "neu", blick: "dezent", touch: "schieber", sitz: "lebendig" };
+  var SET = { laps: 3, opp: 5, level: 0, music: 0.8, sfx: 0.8, gfx: "auto", best: null, cam: 0, licht: "neu", fahr: "neu", blick: "dezent", touch: "schieber", sitz: "lebendig", quali: "mit" };
   function loadSettings(hot) {
     let s = {};
     try {
@@ -8313,6 +8378,7 @@ void main(){
     if (![3, 5, 8].includes(SET.laps)) SET.laps = 3;
     if (![3, 5, 7].includes(SET.opp)) SET.opp = 5;
     SET.level = clamp(SET.level | 0, 0, 2);
+    if (SET.quali !== "ohne") SET.quali = "mit";
     if (!LOOKS[SET.licht]) SET.licht = "neu";
     if (!FEELS[SET.fahr]) SET.fahr = "neu";
     if (!AHEAD[SET.blick]) SET.blick = "dezent";
@@ -8899,7 +8965,7 @@ void main(){
         i === 0 ? G2.state === "foot" ? "fehlt noch" : "sitzt" : crew.on ? STATE[crewFigure(i).state] || "" : "sitzt", k.driver.color, i === 0]);
       const all = !res && rows.every((r) => r[2] === "sitzt");
       const FONT = SCREEN_FONT;
-      const sig = JSON.stringify([rows, SET.laps, SET.level, !!res, !!(document.fonts && document.fonts.check('700 30px "Chakra Petch"'))]);
+      const sig = JSON.stringify([rows, SET.laps, SET.level, SET.quali, !!res, !!(document.fonts && document.fonts.check('700 30px "Chakra Petch"'))]);
       if (sig === brief.sig) return;
       brief.sig = sig;
       const g = brief.ctx;
@@ -8922,7 +8988,7 @@ void main(){
       g.fillStyle = "#8d98ab";
       g.font = "500 24px " + FONT;
       g.textAlign = "right";
-      g.fillText(SET.laps + " Runden · Niveau " + ["Azubi", "Geselle", "Meister"][SET.level], 1552, 84);
+      g.fillText((SET.quali !== "ohne" ? "Zeitfahren · " : "") + SET.laps + " Runden · Niveau " + ["Azubi", "Geselle", "Meister"][SET.level], 1552, 84);
       g.textAlign = "left";
       const fit = (tx, x, y, wide, px, wt) => {
         for (; px > 14; px--) {
@@ -8931,8 +8997,10 @@ void main(){
         }
         g.fillText(tx, x, y);
       };
-      const steps = ["Helm nehmen, ins Kart setzen. Los, wenn alle sitzen.", "Rückwärts aus der Box, durchs Tor auf die Strecke.", "Eine Runde bis in deine Startbox. Ampel aus: Start.",
-        "Nach der Zielflagge eine Runde ausrollen.", "Durchs Tor zurück, Nase voran auf deinen Platz."];
+      const steps = SET.quali !== "ohne" ? ["Helm nehmen, ins Kart setzen. Los, wenn alle sitzen.", "Rückwärts aus der Box, durchs Tor auf die Strecke.",
+        "Aufwärmen bis zur Linie. Dann zählt eine Runde auf Zeit.", "Noch eine Runde bis in deine Startbox. Ampel aus: Start.", "Nach der Zielflagge ausrollen, durchs Tor zurück."]
+        : ["Helm nehmen, ins Kart setzen. Los, wenn alle sitzen.", "Rückwärts aus der Box, durchs Tor auf die Strecke.", "Eine Runde bis in deine Startbox. Ampel aus: Start.",
+          "Nach der Zielflagge eine Runde ausrollen.", "Durchs Tor zurück, Nase voran auf deinen Platz."];
       steps.forEach((tx, n) => {
         const y = 160 + n * 64;
         g.fillStyle = "#ff2e88";
@@ -9722,7 +9790,9 @@ void main(){
         k.z = bb.z;
         k.th = bb.th;
       }
-      race.pitBegin(SITE.pit);
+      race.pitBegin(SITE.pit, SET.quali !== "ohne");
+      G2.qSeen = 0;
+      G2.qShown = false;
       crewCall(true);
       race.pitHold = !crewSeated();
       setPit(true, !race.pitHold, false);
@@ -9735,7 +9805,7 @@ void main(){
       audio.show = 1;
       hud.show(true);
       hud.lights(0, false);
-      const how = (DEVICE.touch ? "R\xFCckw\xE4rts aus der Box (Bremse halten)" : "R\xFCckw\xE4rts aus der Box (S oder \u2193)") + ", dann eine Runde zu Startbox " + (race.player.slot + 1);
+      const how = (DEVICE.touch ? "R\xFCckw\xE4rts aus der Box (Bremse halten)" : "R\xFCckw\xE4rts aus der Box (S oder \u2193)") + (race.quali ? ", aufw\xE4rmen bis zur Linie: Dann z\xE4hlt eine Runde auf Zeit" : ", dann eine Runde zu Startbox " + (race.player.slot + 1));
       G2.outHow = how;
       if (race.pitHold) hud.message("Die anderen steigen ein", "", 2.6);
       else {
@@ -9745,7 +9815,7 @@ void main(){
       const k = race.player;
       slotMark.position.set(k.gx, 0, k.gz);
       slotMark.rotation.y = 0;
-      slotMark.visible = true;
+      slotMark.visible = !race.quali;
       canvas.focus();
     }
     function armGrid() {
@@ -10433,7 +10503,25 @@ void main(){
             note(G2.outHow);
           }
           if (race.pitOut && PIT.open) setPit(false, false, false);
-          if (player && !player.set && G2.outHint === 0) {
+          if (race.quali && player) {
+            const q = player.q | 0;
+            if (q !== G2.qSeen) {
+              G2.qSeen = q;
+              if (q === 1) {
+                hud.message("Zeitrunde", "hot", 2.2);
+                note("Diese Runde z\xE4hlt f\xFCr deinen Startplatz");
+              } else if (q === 2 && isFinite(player.qTime) && !race.qDone) hud.message(fmtTime(player.qTime), "", 3);
+            }
+            if (race.qDone && !G2.qShown) {
+              G2.qShown = true;
+              const n = player.slot + 1, timed = isFinite(player.qTime);
+              slotMark.position.set(player.gx, 0, player.gz);
+              slotMark.visible = true;
+              hud.message((n === 1 ? "Pole Position" : "Startplatz " + n) + (timed ? " \xB7 " + fmtTime(player.qTime) : ""), n === 1 ? "hot" : "", 3.4);
+              note(timed ? "Noch eine Runde bis in deine Startbox " + n : "Zeitfahren vorbei, du hast keine Zeit: Startbox " + n + ", hinten");
+            }
+          }
+          if (player && !player.set && G2.outHint === 0 && race.qDone) {
             let gap = player.gs - player.s;
             if (gap < 0) gap += track.L;
             if (gap < 110 && player.z < 31.5) {
@@ -10723,6 +10811,7 @@ void main(){
     seg(["m-laps", "b-laps"], "laps", Number);
     seg(["m-opp", "b-opp"], "opp", Number);
     seg(["m-level", "b-level"], "level", Number);
+    seg("b-quali", "quali", String);
     seg(["m-gfx", "p-gfx"], "gfx", String);
     seg(["m-ahead", "p-ahead"], "blick", String);
     seg(["m-seat", "p-seat"], "sitz", String);
