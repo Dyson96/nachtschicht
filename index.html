@@ -5,7 +5,7 @@
 <!-- Nachtschicht Grand Prix. (c) 2026. Alle Rechte vorbehalten. Kopieren, Veraendern, Weiterverbreiten und Einbetten nur mit schriftlicher Erlaubnis; siehe LICENSE.txt. -->
 <meta name="robots" content="noindex, nofollow">
 <script>(function(){var ok=["dyson96.github.io"],h=location.hostname,loc=h===""||h==="localhost"||h==="127.0.0.1"||h==="[::1]"||/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(h)||/\.local$/.test(h),own=loc||!ok.length||ok.indexOf(h)>=0,fr=false;try{fr=window.top!==window.self}catch(e){fr=true}if(!own||(fr&&!loc)){window.__LOCK=1;document.write('<meta charset="utf-8"><body style="margin:0;background:#050409;color:#ccd;font:16px/1.5 sans-serif;display:grid;place-items:center;height:100vh;text-align:center"><p>Nachtschicht Grand Prix l\u00e4uft nur auf seiner eigenen Adresse.<br><a style="color:#ff4fa0" href="https://dyson96.github.io/nachtschicht/">Zum Spiel</a></p></body>');document.close();if(window.stop)window.stop();}})();</script>
-<script>window.__BUILD="14.11.2026 18:11";</script>
+<script>window.__BUILD="14.11.2026 19:05";</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -9126,7 +9126,7 @@ void main(){
         i === 0 ? G2.state === "foot" ? "fehlt noch" : "sitzt" : crew.on ? STATE[crewFigure(i).state] || "" : "sitzt", k.driver.color, i === 0]);
       const all = !res && rows.every((r) => r[2] === "sitzt");
       const FONT = SCREEN_FONT;
-      const sig = JSON.stringify([rows, SET.laps, SET.level, SET.quali, !!res, !!(document.fonts && document.fonts.check('700 30px "Chakra Petch"'))]);
+      const sig = JSON.stringify([rows, SET.laps, SET.level, SET.quali, !!res, guide.call, guide.step, !!(document.fonts && document.fonts.check('700 30px "Chakra Petch"'))]);
       if (sig === brief.sig) return;
       brief.sig = sig;
       const g = brief.ctx;
@@ -9163,12 +9163,16 @@ void main(){
         : ["Helm nehmen, ins Kart setzen. Los, wenn alle sitzen.", "Rückwärts aus der Box, durchs Tor auf die Strecke.", "Eine Runde bis in deine Startbox. Ampel aus: Start.",
           "Nach der Zielflagge eine Runde ausrollen.", "Durchs Tor zurück, Nase voran auf deinen Platz."];
       steps.forEach((tx, n) => {
-        const y = 160 + n * 64;
-        g.fillStyle = "#ff2e88";
+        const y = 160 + n * 64, now = guide.step === n, dim = guide.step >= 0 && !now;
+        if (now) {
+          g.fillStyle = "rgba(255,46,136,0.2)";
+          g.fillRect(34, y - 30, 742, 58);
+        }
+        g.fillStyle = dim ? "#7a2a52" : "#ff2e88";
         g.font = "700 34px " + FONT;
         g.fillText(String(n + 1), 48, y);
-        g.fillStyle = "#dfe6f2";
-        fit(tx, 96, y, 672, 30, "500");
+        g.fillStyle = dim ? "#77808f" : now ? "#ffffff" : "#dfe6f2";
+        fit(tx, 96, y, 672, 30, now ? "700" : "500");
       });
       const rh = Math.min(48, 290 / rows.length);
       rows.forEach((r, n) => {
@@ -9186,10 +9190,315 @@ void main(){
       });
       g.fillStyle = all ? "#5dffa2" : "#8d98ab";
       g.font = "500 24px " + FONT;
-      g.fillText(res ? "Schnellste Runde je Fahrer." : all ? "Alle sitzen: Ausfahrt frei." : "Start, wenn alle im Kart sitzen.", 848, 458);
+      if (guide.call) {
+        g.fillStyle = "#ff2e88";
+        g.font = "700 26px " + FONT;
+        g.fillText(guide.call, 848, 458, 704);
+      } else g.fillText(res ? "Schnellste Runde je Fahrer." : all ? "Alle sitzen: Ausfahrt frei." : "Start, wenn alle im Kart sitzen.", 848, 458);
       brief.tex.needsUpdate = true;
     }
     const info = { made: false, t: 0, left: null, right: null, lsig: "", rsig: "", gsig: "", laps: [], q: [], ev: null, evT: 0 };
+    const guide = { stage: "", run: 1, briefed: false, brief: 0, step: -1, call: "", dash: "", goal: "", t: 0 };
+    const BRIEF_STEP = 1.9;
+    function guideUpdate(dt) {
+      const st = G2.state, P = race.player;
+      let s = "";
+      guide.t += dt;
+      if (!hallAsset || !G2.visit) s = "";
+      else if (st === "foot") {
+        if (brief.result && !crew.called) s = crew.pod && crew.pod.phase !== "done" ? "ehrung" : "pause";
+        else if (!foot.helm) s = "helm";
+        else if (guide.brief > 0) s = "briefing";
+        else if (!guide.briefed) s = "einweisung";
+        else s = "karts";
+        if (s === "einweisung" && foot.y < 1 && foot.x > -22.8 && foot.x < -9.2 && foot.z > 46.2 && foot.z < 57.8) {
+          guide.brief = 1e-3;
+          guide.step = -1;
+          s = "briefing";
+        }
+        if (guide.brief > 0) {
+          guide.brief -= dt;
+          if (guide.brief <= 0 && guide.step < 4) {
+            guide.step++;
+            guide.brief = BRIEF_STEP;
+            if (paSpeak(PA_BRIEF(SET.quali !== "ohne")[guide.step], () => { guide.brief = Math.min(guide.brief, 0.45); })) guide.brief = 9;
+          } else if (guide.brief <= 0) {
+            guide.briefed = true;
+            guide.step = -1;
+            crewCall();
+          }
+        }
+      } else if (st === "outlap") s = race.pitHold ? "warten" : P && P.z > 33.3 && P.x < 20.3 ? "ausfahrt" : "strecke";
+      else if (st === "grid") s = "start";
+      else if (st === "race") s = "rennen";
+      else if (st === "finished") s = "ziel";
+      else if (st === "inlap") s = P && P.set ? "aussteigen" : P && P.z > 33.4 ? "platz" : "einfahrt";
+      guide.stage = s;
+      const R = "LAUF " + guide.run + " \u00b7 ";
+      guide.call = !s ? "" : ({ helm: R + "FAHRER BITTE ZUR AUSR\u00dcSTUNG", einweisung: R + "FAHRER BITTE ZUR EINWEISUNG", briefing: R + "EINWEISUNG L\u00c4UFT", karts: R + "FAHRER BITTE ZU DEN KARTS",
+        warten: R + "FAHRER STEIGEN EIN", ausfahrt: R + "BOXENAUSFAHRT FREI", strecke: R + (race.quali && !race.qDone ? "ZEITFAHREN" : "STARTAUFSTELLUNG"), start: R + "START", rennen: R + "RENNEN L\u00c4UFT",
+        ziel: R + "ZIELFLAGGE", einfahrt: R + "ZIELFLAGGE \u00b7 FAHRER IN DIE BOX", platz: R + "ZIELFLAGGE \u00b7 FAHRER IN DIE BOX", aussteigen: R + "BEENDET", ehrung: "SIEGEREHRUNG AM PODEST",
+        pause: "N\u00c4CHSTER LAUF \u00b7 FAHRER ZU DEN KARTS" })[s] || "";
+      let d = "";
+      if (P && s === "warten") d = "WARTEN: AUSFAHRT ROT";
+      else if (P && s === "ausfahrt") {
+        const bb = bay(0);
+        d = Math.hypot(P.x - bb.x, P.z - bb.z) < 2.2 ? "R\u00dcCKW\u00c4RTS AUSPARKEN" : "ZUR AUSFAHRT";
+      } else if (s === "einfahrt") d = "BOX: RECHTS REIN";
+      else if (s === "platz") d = "ZU DEINEM PLATZ";
+      else if (P && s === "aussteigen") d = "PLATZ " + (race.final ? race.final[0] : P.pos) + " \u00b7 AUSSTEIGEN";
+      guide.dash = d;
+      guide.goal = s === "helm" ? foot.back ? "gestell" : "regal" : s === "einweisung" ? "einweisung" : s === "karts" || s === "pause" ? "kart" : s === "ehrung" ? "podest" : "";
+    }
+    const PA_TEXT = {
+      willkommen: "Willkommen beim Nachtschicht Grand Prix. Fahrer des nächsten Laufs: bitte zur Ausrüstung.",
+      ausruestung: "Fahrer des nächsten Laufs: bitte zur Ausrüstung.",
+      einweisung: "Fahrer des nächsten Laufs: bitte zur Einweisung.",
+      karts: "Fahrer bitte zu den Karts. Die Ausfahrt öffnet, wenn alle sitzen.",
+      ausfahrt: "Die Boxenausfahrt ist frei.",
+      zeitfahren: "Zeitfahren. Nach dem Aufwärmen zählt eine Runde.",
+      aufstellung: "Fahrer bitte in die Startaufstellung.",
+      letzte: "Letzte Runde.",
+      ziel: "Zielflagge. Eine Runde ausrollen, dann rechts in die Box.",
+      ehrung: "Die Siegerehrung findet am Podest statt.",
+      naechster: "Der nächste Lauf ist bereit. Fahrer bitte zu den Karts.",
+      ohnehelm: "Bitte den Helm aufsetzen. Ohne Helm kein Start."
+    };
+    const PA_BRIEF = (q) => ["Helm auf und ins Kart setzen. Los geht es, wenn alle sitzen.", "Rückwärts aus der Box und durchs Tor auf die Strecke."].concat(q
+      ? ["Aufwärmen bis zur Linie. Dann zählt eine Runde auf Zeit.", "Danach in deine Startbox. Ampel aus heißt Start.", "Nach der Zielflagge ausrollen und durchs Tor zurück."]
+      : ["Eine Runde bis in deine Startbox. Ampel aus heißt Start.", "Nach der Zielflagge eine Runde ausrollen.", "Dann durchs Tor zurück auf deinen Platz."]);
+    const pa = { q: [], gap: 0, key: "", voice: null, looked: 0, speaking: false, welcomed: false, nearT: 0, log: [] };
+    function paVoice() {
+      const sy = window.speechSynthesis;
+      if (!sy || !sy.getVoices) return null;
+      if (pa.voice || pa.looked > 40) return pa.voice;
+      pa.looked++;
+      const de = sy.getVoices().filter((v) => /^de/i.test(v.lang) && v.localService !== false);
+      pa.voice = de.find((v) => /Anna|Petra|Markus|Katja|Hedda|Stefan|Yannick|Viktor/.test(v.name)) || de.find((v) => !/Eddy|Flo|Grand|Reed|Rocko|Sandy|Shelley/.test(v.name)) || de[0] || null;
+      return pa.voice;
+    }
+    function paSpeak(text, done) {
+      const v = paVoice();
+      if (!v || audio.muted || !audio.running()) return false;
+      const u = new SpeechSynthesisUtterance(text);
+      u.voice = v;
+      u.lang = v.lang;
+      u.rate = 0.96;
+      u.volume = G2.state === "foot" ? 1 : 0.9;
+      pa.speaking = true;
+      let over = false;
+      const end = () => {
+        if (over) return;
+        over = true;
+        pa.speaking = false;
+        if (done) done();
+      };
+      u.onend = end;
+      u.onerror = end;
+      setTimeout(end, 9000);
+      window.speechSynthesis.speak(u);
+      return true;
+    }
+    function paGong() {
+      audio.oneShot((ctx, t) => {
+        [659.3, 523.3, 392].forEach((f, i) => {
+          const o = ctx.createOscillator(), o2 = ctx.createOscillator(), g = ctx.createGain(), at = t + i * 0.36;
+          o.frequency.value = f;
+          o2.frequency.value = f * 2.76;
+          g.gain.setValueAtTime(1e-4, at);
+          g.gain.exponentialRampToValueAtTime(0.22, at + 0.012);
+          g.gain.exponentialRampToValueAtTime(1e-4, at + 1.5);
+          const g2 = ctx.createGain();
+          g2.gain.value = 0.18;
+          o.connect(g);
+          o2.connect(g2);
+          g2.connect(g);
+          g.connect(audio.sfx);
+          if (audio.revIn) g.connect(audio.revIn);
+          o.start(at);
+          o2.start(at);
+          o.stop(at + 1.6);
+          o2.stop(at + 1.6);
+        });
+      });
+    }
+    function paSay(id, key) {
+      if (!PA_TEXT[id] || pa.q.some((it) => it.id === id)) return;
+      pa.q.push({ id, key: key || "" });
+      pa.log.push(id);
+      if (pa.log.length > 30) pa.log.shift();
+    }
+    function paUpdate(dt) {
+      if (!hallAsset) return;
+      if (!pa.voice && (pa.poll = (pa.poll || 0) - dt) < 0) {
+        pa.poll = 0.5;
+        paVoice();
+      }
+      const s = guide.stage, lead = race.order && race.order[0];
+      const key = s === "helm" || s === "einweisung" || s === "karts" || s === "ausfahrt" || s === "ziel" || s === "ehrung" ? s
+        : s === "strecke" ? race.quali && !race.qDone ? "zeitfahren" : "aufstellung" : s === "rennen" ? !race.demo && lead && lead.lap >= race.laps ? "letzte" : "" : s === "pause" ? "naechster" : "";
+      if (key !== pa.key) {
+        pa.key = key;
+        if (key) paSay(key === "helm" ? pa.welcomed ? "ausruestung" : "willkommen" : key, key);
+        if (key === "helm") pa.welcomed = true;
+      }
+      const bare = G2.state === "foot" && foot.near && !foot.helm;
+      if (bare && pa.nearT <= 0) paSay("ohnehelm");
+      pa.nearT = bare ? 12 : Math.max(0, pa.nearT - dt);
+      if (pa.gap > 0) pa.gap -= dt;
+      if (!pa.q.length || pa.speaking || pa.gap > 0 || guide.brief > 0 || !audio.running() || audio.muted) {
+        if (pa.q.length > 2) pa.q.splice(0, pa.q.length - 2);
+        return;
+      }
+      const it = pa.q.shift(), id = it.id, bank = audio.sample && audio.sample.bank;
+      if (it.key && it.key !== pa.key) return;
+      pa.said = id;
+      paGong();
+      if (bank && bank["pa_" + id]) {
+        pa.gap = 1.3 + bank["pa_" + id].duration + 0.8;
+        setTimeout(() => audio.sample.shot("pa_" + id, 0.8, 1, 0, G2.state === "foot" ? 0.15 : 0.5), 1300);
+      } else {
+        pa.speaking = true;
+        pa.gap = 1.2;
+        setTimeout(() => {
+          pa.speaking = false;
+          if (paSpeak(PA_TEXT[id], () => { pa.gap = 0.8; })) pa.gap = 0;
+        }, 1250);
+      }
+    }
+    const lead = { made: false, N: [], E: [], att: null, U: { uLeadT: { value: 0 } }, goal: "?", edge: -1, t: 0, ends: {}, led: null };
+    function leadInit() {
+      lead.made = true;
+      if (!hallAsset) return;
+      const N = lead.N, E = lead.E;
+      const node = (x, z) => N.push({ x, z, to: [] }) - 1;
+      const link = (a, b) => {
+        const len = Math.hypot(N[a].x - N[b].x, N[a].z - N[b].z);
+        N[a].to.push([b, E.length, len]);
+        N[b].to.push([a, E.length, len]);
+        E.push({ a, b, len });
+      };
+      const chain = (pts) => {
+        const ids = pts.map((q) => typeof q === "number" ? q : node(q[0], q[1]));
+        for (let i = 1; i < ids.length; i++) link(ids[i - 1], ids[i]);
+        return ids;
+      };
+      const ZC = 47.6, ZW = 44.8;
+      const a = chain([[-49, 57.7], [-49, 52], [-49, ZC], [-35.5, ZC], [-30.8, ZC], [-29, ZC], [-17, ZC], [-12, ZC]]);
+      lead.ends.einweisung = a[6];
+      chain([a[1], [-57.2, 52]]);
+      lead.ends.gestell = chain([a[3], [-35.5, 52.5]])[1];
+      lead.ends.regal = chain([a[4], [-30.8, 56.3]])[1];
+      const xs = SITE.bays.map((b) => b.x + 1.5).concat([-29, -12, -0.7]).sort((q, r) => q - r);
+      const w = chain(xs.map((x) => [x, ZW]));
+      xs.forEach((x, i) => {
+        if (x === -29) link(w[i], a[5]);
+        else if (x === -12) link(w[i], a[7]);
+        else if (x === -0.7) lead.ends.podest = w[i];
+        else lead.ends["kart" + x.toFixed(1)] = chain([w[i], [x, 43.76]])[1];
+      });
+      const HW = 0.05, Y = -0.002, pos = [], att = [], idx = [];
+      for (const e of E) {
+        const A = N[e.a], B = N[e.b], dx = (B.x - A.x) / e.len, dz = (B.z - A.z) / e.len, k = pos.length / 3;
+        for (const [Q, sgn] of [[A, -1], [B, 1]]) for (const side of [-1, 1]) {
+          pos.push(Q.x + dx * sgn * HW - dz * side * HW, Y, Q.z + dz * sgn * HW + dx * side * HW);
+          att.push(0, 0, side * 0.5 + 0.5);
+        }
+        idx.push(k, k + 1, k + 2, k + 2, k + 1, k + 3);
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+      lead.att = new THREE.Float32BufferAttribute(att, 3);
+      lead.att.setUsage(THREE.DynamicDrawUsage);
+      geo.setAttribute("aLead", lead.att);
+      geo.setIndex(idx);
+      const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
+      mat.onBeforeCompile = (sh) => {
+        sh.uniforms.uLeadT = lead.U.uLeadT;
+        sh.vertexShader = "attribute vec3 aLead;\nvarying vec3 vLead;\n" + sh.vertexShader.replace("#include <begin_vertex>", "#include <begin_vertex>\n  vLead = aLead;");
+        sh.fragmentShader = "uniform float uLeadT;\nvarying vec3 vLead;\n" + sh.fragmentShader.replace("#include <map_fragment>", [
+          "{",
+          "  float lip = smoothstep(0.62, 0.72, abs(vLead.z - 0.5) * 2.0);",
+          "  float x = fract((vLead.x + uLeadT * 2.6) / 3.2);",
+          "  float run = vLead.y * (0.14 + max(pow(1.0 - x, 3.0), smoothstep(0.8, 0.0, vLead.x)));",
+          "  diffuseColor.rgb = mix(vec3(0.1, 0.13, 0.17) + vec3(1.9, 4.2, 0.6) * run, vec3(0.012, 0.013, 0.015), lip);",
+          "}"
+        ].join("\n"));
+      };
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.frustumCulled = false;
+      scene.add(mesh);
+      const rg = SITE.blocks.find((b) => b[6] === "regal"), tr = SITE.blocks.find((b) => b[6] === "trockner");
+      const bar = (x, y, z, sx, sy, sz) => {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), new THREE.MeshBasicMaterial({ color: 0 }));
+        m.position.set(x, y, z);
+        scene.add(m);
+        return m;
+      };
+      lead.led = { regal: bar(SITE.helm.take[0], SITE.helm.take[1] - 0.016, rg[1] + 0.01, 0.3, 0.02, 0.04), gestell: bar(tr[2] - 0.015, SITE.helm.back[1] - 0.01, SITE.helm.back[2], 0.03, 0.016, 0.3) };
+    }
+    function leadRoute() {
+      const N = lead.N, E = lead.E, arr = lead.att.array;
+      for (let i = 0; i < E.length * 4; i++) arr[i * 3] = arr[i * 3 + 1] = 0;
+      const g = lead.goal === "kart" ? lead.ends["kart" + (bay(0).x + 1.5).toFixed(1)] : lead.ends[lead.goal];
+      if (g !== undefined && lead.edge >= 0) {
+        const d = N.map(() => 1e9), open = [g];
+        d[g] = 0;
+        while (open.length) {
+          const n = open.shift();
+          for (const t of N[n].to) if (d[n] + t[2] < d[t[0]] - 1e-6) {
+            d[t[0]] = d[n] + t[2];
+            open.push(t[0]);
+          }
+        }
+        const put = (ei, da, db) => {
+          const o = ei * 12;
+          arr[o] = arr[o + 3] = da;
+          arr[o + 6] = arr[o + 9] = db;
+          arr[o + 1] = arr[o + 4] = arr[o + 7] = arr[o + 10] = 1;
+        };
+        const e0 = E[lead.edge];
+        let n = d[e0.a] < d[e0.b] ? e0.a : e0.b;
+        put(lead.edge, n === e0.a ? d[n] : d[n] + e0.len, n === e0.a ? d[n] + e0.len : d[n]);
+        for (let guard = 0; n !== g && guard < 60; guard++) {
+          let nx = null;
+          for (const t of N[n].to) if (Math.abs(d[t[0]] + t[2] - d[n]) < 1e-4) nx = t;
+          if (!nx) break;
+          put(nx[1], d[E[nx[1]].a], d[E[nx[1]].b]);
+          n = nx[0];
+        }
+      }
+      lead.att.needsUpdate = true;
+    }
+    function leadUpdate(dt) {
+      if (!lead.made) leadInit();
+      if (!lead.att) return;
+      lead.U.uLeadT.value += dt;
+      const goal = G2.state === "foot" ? guide.goal : "";
+      const beat = 0.5 + 0.5 * Math.sin(lead.U.uLeadT.value * 5);
+      for (const k in lead.led) {
+        const on = goal === k ? 0.2 + 0.8 * beat : 0;
+        lead.led[k].material.color.setRGB(0.012 + 1.3 * on, 0.014 + 2.9 * on, 0.014 + 0.45 * on);
+      }
+      lead.t -= dt;
+      if (goal === lead.goal && lead.t > 0) return;
+      lead.t = 0.3;
+      let edge = -1, best = 1e9;
+      if (goal) for (let i = 0; i < lead.E.length; i++) {
+        const A = lead.N[lead.E[i].a], B = lead.N[lead.E[i].b], L = lead.E[i].len;
+        const u = clamp(((foot.x - A.x) * (B.x - A.x) + (foot.z - A.z) * (B.z - A.z)) / (L * L), 0, 1);
+        const dd = Math.hypot(foot.x - A.x - (B.x - A.x) * u, foot.z - A.z - (B.z - A.z) * u);
+        if (dd < best) {
+          best = dd;
+          edge = i;
+        }
+      }
+      if (goal !== lead.goal || edge !== lead.edge) {
+        lead.goal = goal;
+        lead.edge = edge;
+        leadRoute();
+      }
+    }
     const proj = { A: null, B: null, sigA: "", sigB: "", ka: 0, kb: 0, heads: [] };
     function projField(x0, z0, w, d, cw, ch) {
       const c = document.createElement("canvas");
@@ -9396,13 +9705,13 @@ void main(){
     function infoUpdate(dt) {
       if (!info.made) infoInit();
       if (!info.left) return;
-      const st = G2.state, home = st === "inlap" && race.player && !race.player.set;
+      const st = G2.state, home = st === "inlap" && race.player && !race.player.set || st === "foot" && guide.goal === "kart";
       projUpdate(dt);
       if (home) {
         const bb = bay(0);
         info.bay.position.set(bb.x + 1.5, 1.33, bb.z + 2.22);
       }
-      info.bay.visible = home && (G2.time * 3 | 0) % 2 === 0;
+      info.bay.visible = home && (guide.t * 3 | 0) % 2 === 0;
       if (info.evT > 0) info.evT -= dt;
       info.t -= dt;
       if (info.t > 0) return;
@@ -9662,7 +9971,7 @@ void main(){
         const lapT = qq === 1 ? race.pitT - player.qStart : qq === 2 && isFinite(player.qTime) ? player.qTime
           : race.state === "racing" && player.lap >= 1 ? race.time - player.lapStart : race.state === "racing" ? race.time : 0;
         speed = Math.round(Math.abs(player.u) * 3.6);
-        lapL = !pit ? "RUNDE " + clamp(player.lap, 1, race.laps) + "/" + race.laps : !out ? "AUSLAUFRUNDE" : qq === 0 ? "AUFW\u00c4RMEN" : qq === 1 ? "ZEITRUNDE" : "ZUR STARTBOX";
+        lapL = guide.dash || (!pit ? "RUNDE " + clamp(player.lap, 1, race.laps) + "/" + race.laps : !out ? "AUSLAUFRUNDE" : qq === 0 ? "AUFW\u00c4RMEN" : qq === 1 ? "ZEITRUNDE" : "ZUR STARTBOX");
         timeS = fmtTime(Math.max(1e-4, lapT)).slice(0, -2);
         news = hud.newsT > 0 ? hud.newsText : "";
         delta = isFinite(race.liveDelta) && race.state === "racing" ? fmtDelta(race.liveDelta).slice(0, -1) : "";
@@ -9702,10 +10011,12 @@ void main(){
           g.textAlign = "left";
           g.fillStyle = "#19e6ff";
           g.font = "700 36px " + F;
-          g.fillText(lapL, 16, 44);
-          g.textAlign = "right";
-          g.fillStyle = "#ffffff";
-          g.fillText("P" + posS + "/" + race.karts.length, 496, 44);
+          g.fillText(lapL, 16, 44, guide.dash ? 480 : 330);
+          if (!guide.dash) {
+            g.textAlign = "right";
+            g.fillStyle = "#ffffff";
+            g.fillText("P" + posS + "/" + race.karts.length, 496, 44);
+          }
         }
         g.textAlign = "left";
         g.fillStyle = "#ffffff";
@@ -9736,7 +10047,7 @@ void main(){
     function boardDraw() {
       const W = 1200, H = 537, FONT = SCREEN_FONT, g = brief.board.ctx;
       const day = Object.keys(brief.day).map((n) => [n, brief.day[n]]).sort((a, b) => a[1] - b[1]).slice(0, 8);
-      const sig = JSON.stringify([brief.last, day, SET.best, SET.laps, SET.opp, G2.state === "race", !!(document.fonts && document.fonts.check('700 30px "Chakra Petch"'))]);
+      const sig = JSON.stringify([brief.last, day, SET.best, SET.laps, SET.opp, guide.call, !!(document.fonts && document.fonts.check('700 30px "Chakra Petch"'))]);
       if (sig === brief.bsig) return;
       brief.bsig = sig;
       g.setTransform(g.canvas.width / W, 0, 0, g.canvas.height / H, 0, 0);
@@ -9757,7 +10068,11 @@ void main(){
       g.textAlign = "right";
       g.fillStyle = "#8d98ab";
       g.font = "500 27px " + FONT;
-      g.fillText(G2.state === "race" ? "Lauf läuft" : "Nächster Lauf: " + SET.laps + " Runden · " + (SET.opp + 1) + " Fahrer", 1164, 74);
+      if (guide.call) {
+        g.fillStyle = "#ff2e88";
+        g.font = "700 34px " + FONT;
+        g.fillText(guide.call, 1164, 76, 700);
+      } else g.fillText("N\u00e4chster Lauf: " + SET.laps + " Runden \u00b7 " + (SET.opp + 1) + " Fahrer", 1164, 74);
       const col = (x, title, rows, none) => {
         g.textAlign = "left";
         g.fillStyle = "#ff2e88";
@@ -9862,7 +10177,8 @@ void main(){
       else if (e.code === "KeyM") toggleMute();
       else if (e.code === "Escape" || e.code === "KeyP") {
         if (G2.state === "race" || G2.state === "grid" || G2.state === "outlap" || G2.state === "inlap" || G2.state === "foot") setPaused(!G2.paused);
-      } else if (G2.state === "foot" && (e.code === "KeyE" || e.code === "Enter" || e.code === "Space")) footAct();
+      } else if (G2.state === "inlap" && G2.parked && !$2("results").classList.contains("on") && (e.code === "KeyE" || e.code === "Enter")) getOut();
+      else if (G2.state === "foot" && (e.code === "KeyE" || e.code === "Enter" || e.code === "Space")) footAct();
       else if (e.code === "KeyR") rescue();
       else if (e.code === "KeyL") nextLook();
       else if (e.code === "KeyJ") nextTrack();
@@ -10130,6 +10446,7 @@ void main(){
     function setPaused(p) {
       if (G2.paused === p) return;
       G2.paused = p;
+      if (p && window.speechSynthesis) window.speechSynthesis.cancel();
       if (p) $2("p-diag").textContent = audio.report() + " \u00B7 Bild: " + renderer.domElement.width + " x " + renderer.domElement.height + (DEVICE.lite ? ", Handy-Fassung" : "");
       $2("pause").classList.toggle("on", p);
       if (p) $2("p-resume").textContent = G2.state === "foot" ? "Weitergehen" : "Weiterfahren";
@@ -10148,6 +10465,12 @@ void main(){
       audio.setMuted(ui.muted());
     }
     let noteTimer = 0;
+    function noteHold(html) {
+      const el = $2("note");
+      el.innerHTML = html;
+      el.classList.add("on");
+      clearTimeout(noteTimer);
+    }
     function note(text) {
       const el = $2("note");
       el.textContent = text;
@@ -10330,6 +10653,10 @@ void main(){
       race.final = null;
       foot.desk = null;
       foot.helm = foot.back = false;
+      guide.run = 1;
+      guide.briefed = false;
+      guide.brief = 0;
+      guide.step = -1;
       foot.sayT = 0;
       helmetShow();
       $2("book").classList.remove("on");
@@ -10378,11 +10705,12 @@ void main(){
       if (foot.busy) text = "";
       else if (foot.desk) text = "";
       else if (foot.sayT > 0) text = foot.say;
-      else if (foot.near) text = hallAsset && !foot.helm ? "Ohne Helm kein Start. Dein Helm liegt " + (foot.back ? "auf dem Rückgabe-Gestell" : "im Regal") + " der Ausrüstung." : DEVICE.touch ? "" : "<b>E</b>Einsteigen";
+      else if (foot.near) text = hallAsset && !foot.helm ? SET.anzeige === "welt" && pa.voice && audio.running() && !audio.muted ? "" : "Ohne Helm kein Start. Dein Helm liegt " + (foot.back ? "auf dem Rückgabe-Gestell" : "im Regal") + " der Ausrüstung." : DEVICE.touch ? "" : "<b>E</b>Einsteigen";
       else if (foot.at === "desk") text = DEVICE.touch ? "" : "<b>E</b>Lauf buchen";
       else if (foot.at === "helm") text = DEVICE.touch ? "" : "<b>E</b>Helm nehmen";
       else if (foot.at === "back") text = DEVICE.touch ? "" : "<b>E</b>Helm zurückgeben";
       else if (foot.moved < 4 && foot.hintT < 14) text = DEVICE.touch ? "Links gehen, rechts umsehen." : "<b>W A S D</b>gehen &nbsp; <b>Maus</b>umsehen (ins Bild klicken) &nbsp; <b>Shift</b>schneller";
+      else if (document.body.classList.contains("welt")) text = "";
       else if (hallAsset && foot.moved < 22 && foot.hintT < 30) text = "Links am Empfang kannst du Runden, Gegner und Niveau wählen.";
       else if (hallAsset && !foot.helm && foot.moved < 110 && foot.hintT < 75) text = "Hol dir deinen Helm aus dem Regal der Ausrüstung, dann zu deinem Kart.";
       else if (foot.moved < 110 && foot.hintT < 75) text = "Dein Kart ist das leere in der Reihe an der Strecke.";
@@ -10506,6 +10834,7 @@ void main(){
         k.z = bb.z;
         k.th = bb.th;
       }
+      G2.parked = false;
       race.pitBegin(SITE.pit, SET.quali !== "ohne");
       G2.qSeen = 0;
       G2.qShown = false;
@@ -10526,7 +10855,7 @@ void main(){
       if (race.pitHold) hud.message("Die anderen steigen ein", "", 2.6);
       else {
         hud.message("Boxenausfahrt offen", "", 2.6);
-        note(how);
+        note(document.body.classList.contains("welt") ? DEVICE.touch ? "Bremse halten: r\xFCckw\xE4rts" : "S oder \u2193: r\xFCckw\xE4rts" : how);
       }
       const k = race.player;
       slotMark.position.set(k.gx, 0, k.gz);
@@ -10553,7 +10882,7 @@ void main(){
       crew.pod = crew.on && race.karts.length > 3 ? { phase: "gather", t: 0, end: 0, up: false, top: [1, 2, 3].map((p) => race.final.indexOf(p)) } : null;
       G2.state = "inlap";
       hud.message("Zielflagge", "hot", 2.4);
-      note("Auslaufrunde: zur\xFCck in die Box, dein Platz ist markiert");
+      if (!document.body.classList.contains("welt")) note("Auslaufrunde: zur\xFCck in die Box, dein Platz ist markiert");
       const bb = bay(0);
       slotMark.position.set(bb.x, 0, bb.z);
       slotMark.rotation.y = bb.th;
@@ -10574,6 +10903,9 @@ void main(){
     }
     function getOut() {
       $2("results").classList.remove("on");
+      G2.parked = false;
+      $2("note").classList.remove("on");
+      guide.run++;
       brief.result = brief.last = race.karts.map((k, i) => ({ pos: race.final ? race.final[i] : k.pos, name: k.driver.name, best: isFinite(k.best) ? fmtTime(k.best) : "–", color: k.driver.color, me: k === race.player })).sort((a, b) => a.pos - b.pos);
       for (const k of race.karts) if (isFinite(k.best) && k.best > 0 && !(brief.day[k.driver.name] <= k.best)) brief.day[k.driver.name] = k.best;
       G2.blend = { t: 0, dur: 0.8, x: cam.x, y: cam.y, z: cam.z, lx: cam.lx, ly: cam.ly, lz: cam.lz };
@@ -11212,6 +11544,9 @@ void main(){
         handleEvents();
         crewUpdate(dt, G2.time);
         briefUpdate(dt);
+        guideUpdate(dt);
+        leadUpdate(dt);
+        paUpdate(dt);
         dashUpdate(dt);
         infoUpdate(dt);
         flagUpdate(dt);
@@ -11221,7 +11556,7 @@ void main(){
             if (!race.autoPlayer) player.hold = false;
             setPit(true, true, false);
             hud.message("Boxenausfahrt offen", "", 2.6);
-            note(G2.outHow);
+            note(document.body.classList.contains("welt") ? DEVICE.touch ? "Bremse halten: r\xFCckw\xE4rts" : "S oder \u2193: r\xFCckw\xE4rts" : G2.outHow);
           }
           if (race.pitOut && PIT.open) setPit(false, false, false);
           if (race.quali && player) {
@@ -11230,7 +11565,7 @@ void main(){
               G2.qSeen = q;
               if (q === 1) {
                 hud.message("Zeitrunde", "hot", 2.2);
-                note("Diese Runde z\xE4hlt f\xFCr deinen Startplatz");
+                if (!document.body.classList.contains("welt")) note("Diese Runde z\xE4hlt f\xFCr deinen Startplatz");
               } else if (q === 2 && isFinite(player.qTime) && !race.qDone) hud.message(fmtTime(player.qTime), "", 3);
             }
             if (race.qDone && !G2.qShown) {
@@ -11257,11 +11592,20 @@ void main(){
             setPit(true, false, true);
             race.entryOpen = true;
           } else if (race.parkedAll && PIT.open) setPit(false, false, false);
-          if (G2.state === "inlap" && player.set && !$2("results").classList.contains("on")) {
-            $2("r-again").textContent = "Aussteigen";
-            $2("results").classList.add("on");
-            hud.show(false);
+          if (G2.state === "inlap" && player.set && !G2.parked) {
+            G2.parked = true;
             slotMark.visible = false;
+            let pad = false;
+            try {
+              for (const q of navigator.getGamepads ? navigator.getGamepads() : []) if (q && q.connected) pad = true;
+            } catch (e) {
+            }
+            if (document.body.classList.contains("welt") && !DEVICE.touch && !pad) noteHold("<b>E</b> Aussteigen");
+            else {
+              $2("r-again").textContent = "Aussteigen";
+              $2("results").classList.add("on");
+              hud.show(false);
+            }
           }
         }
         {
@@ -11471,7 +11815,7 @@ void main(){
     $2("m-walk").disabled = false;
     attract();
     requestAnimationFrame(frame);
-    window.__ns = { proj, flag, info, dash, models, helmet, brief, deskOpen, deskClose, crew, crewCall, crewSeated, FIG, enterHall, leaveKart, footAct, foot, FOOT, SITE, PIT, setPit, startOutlap, startInlap, getOut, applyLook, LOOKS, G: G2, SET, race, audio, world, cam, camera, renderer, post, scene, track, models, beginRace, attract, setPaused, hud, fx, keys, AIDriver, HULL, HIT, KP, Kart, stepKart, steerLimit, FEELS, setFeel, nextFeel, rig, AHEAD, nextAhead, PHYS, setPhys, SEATS, setSeat, nextSeat, BACK, DEVICE, touch };
+    window.__ns = { guide, lead, pa, paSay, PA_TEXT, proj, flag, info, dash, models, helmet, brief, deskOpen, deskClose, crew, crewCall, crewSeated, FIG, enterHall, leaveKart, footAct, foot, FOOT, SITE, PIT, setPit, startOutlap, startInlap, getOut, applyLook, LOOKS, G: G2, SET, race, audio, world, cam, camera, renderer, post, scene, track, models, beginRace, attract, setPaused, hud, fx, keys, AIDriver, HULL, HIT, KP, Kart, stepKart, steerLimit, FEELS, setFeel, nextFeel, rig, AHEAD, nextAhead, PHYS, setPhys, SEATS, setSeat, nextSeat, BACK, DEVICE, touch };
   }
   function buildEnv(renderer) {
     const THREE = window.THREE;
