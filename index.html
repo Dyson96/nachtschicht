@@ -5,7 +5,7 @@
 <!-- Nachtschicht Grand Prix. (c) 2026. Alle Rechte vorbehalten. Kopieren, Veraendern, Weiterverbreiten und Einbetten nur mit schriftlicher Erlaubnis; siehe LICENSE.txt. -->
 <meta name="robots" content="noindex, nofollow">
 <script>(function(){var ok=["dyson96.github.io"],h=location.hostname,loc=h===""||h==="localhost"||h==="127.0.0.1"||h==="[::1]"||/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(h)||/\.local$/.test(h),own=loc||!ok.length||ok.indexOf(h)>=0,fr=false;try{fr=window.top!==window.self}catch(e){fr=true}if(!own||(fr&&!loc)){window.__LOCK=1;document.write('<meta charset="utf-8"><body style="margin:0;background:#050409;color:#ccd;font:16px/1.5 sans-serif;display:grid;place-items:center;height:100vh;text-align:center"><p>Nachtschicht Grand Prix l\u00e4uft nur auf seiner eigenen Adresse.<br><a style="color:#ff4fa0" href="https://dyson96.github.io/nachtschicht/">Zum Spiel</a></p></body>');document.close();if(window.stop)window.stop();}})();</script>
-<script>window.__BUILD="14.11.2026 07:36";</script>
+<script>window.__BUILD="14.11.2026 07:46";</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -396,6 +396,21 @@ body.touch .keys { display: none; }
     <p class="diag" id="m-build"></p>
   </section>
 </main>
+
+<div id="book" class="sheet" role="dialog" aria-labelledby="b-h">
+  <div class="card">
+    <h2 id="b-h">Empfang</h2>
+    <p>Dein nächster Lauf. Die anderen Fahrer warten in der Einweisung.</p>
+    <div class="p-set">
+      <div class="row"><span>Runden</span><div class="seg" id="b-laps"><button type="button" data-v="3">3</button><button type="button" data-v="5">5</button><button type="button" data-v="8">8</button></div></div>
+      <div class="row"><span>Gegner</span><div class="seg" id="b-opp"><button type="button" data-v="3">3</button><button type="button" data-v="5">5</button><button type="button" data-v="7">7</button></div></div>
+      <div class="row"><span>Niveau</span><div class="seg" id="b-level"><button type="button" data-v="0">Azubi</button><button type="button" data-v="1">Geselle</button><button type="button" data-v="2">Meister</button></div></div>
+    </div>
+    <div class="acts">
+      <button id="b-ok" class="btn main" type="button">Lauf buchen</button>
+    </div>
+  </div>
+</div>
 
 <div id="pause" class="sheet" role="dialog" aria-labelledby="p-h">
   <div class="card">
@@ -8620,6 +8635,10 @@ void main(){
       crew.on = !!hallAsset && !!models[1].main.helmet && !!models[1].main.neck;
       crew.called = false;
       crew.armed = true;
+      for (const f of crew.list) if (f) {
+        crewShow(f, false);
+        f.state = "off";
+      }
       if (!crew.on) return;
       for (let i = 1; i < race.karts.length; i++) {
         const f = crewFigure(i), sp = CREW.brief[(i - 1) % CREW.brief.length];
@@ -8751,6 +8770,94 @@ void main(){
         poseFigure(f, dt, time);
       }
     }
+    const brief = { mesh: null, ctx: null, tex: null, sig: "", t: 0, result: null };
+    function briefUpdate(dt) {
+      if (!hallAsset) return;
+      brief.t -= dt;
+      if (brief.t > 0) return;
+      brief.t = 0.25;
+      const W = 1600, H = 490;
+      if (!brief.mesh) {
+        const c = document.createElement("canvas");
+        c.width = DEVICE.lite ? 1024 : 2048;
+        c.height = DEVICE.lite ? 256 : 512;
+        brief.ctx = c.getContext("2d");
+        const t = brief.tex = new THREE.CanvasTexture(c);
+        t.encoding = THREE.sRGBEncoding;
+        t.anisotropy = 4;
+        const b = SITE.blocks.find((q) => q[6] === "schirm");
+        const m = brief.mesh = new THREE.Mesh(new THREE.PlaneGeometry(b[3] - b[1] - 0.1, b[5] - b[4] - 0.1), new THREE.MeshBasicMaterial({ map: t, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+        m.position.set(b[0] - 6e-3, (b[4] + b[5]) / 2, (b[1] + b[3]) / 2);
+        m.rotation.y = -Math.PI / 2;
+        scene.add(m);
+      }
+      const res = brief.result && !crew.called ? brief.result : null;
+      const STATE = { wait: "wartet", walk: "unterwegs", enter: "steigt ein", seated: "sitzt" };
+      const rows = res ? res.map((r) => [r.pos + ".", r.name, r.best, r.color, r.me]) : race.karts.map((k, i) => [String(i + 1), k.driver.name,
+        i === 0 ? G2.state === "foot" ? "fehlt noch" : "sitzt" : crew.on ? STATE[crewFigure(i).state] || "" : "sitzt", k.driver.color, i === 0]);
+      const all = !res && rows.every((r) => r[2] === "sitzt");
+      const FONT = '"Chakra Petch", "Segoe UI", system-ui, sans-serif';
+      const sig = JSON.stringify([rows, SET.laps, SET.level, !!res, !!(document.fonts && document.fonts.check('700 30px "Chakra Petch"'))]);
+      if (sig === brief.sig) return;
+      brief.sig = sig;
+      const g = brief.ctx;
+      g.setTransform(g.canvas.width / W, 0, 0, g.canvas.height / H, 0, 0);
+      g.fillStyle = "#04060b";
+      g.fillRect(0, 0, W, H);
+      g.strokeStyle = "#0c5f6e";
+      g.lineWidth = 2;
+      g.strokeRect(14, 14, W - 28, H - 28);
+      g.beginPath();
+      g.moveTo(800, 40);
+      g.lineTo(800, H - 40);
+      g.stroke();
+      g.textBaseline = "alphabetic";
+      g.textAlign = "left";
+      g.fillStyle = "#19e6ff";
+      g.font = "700 44px " + FONT;
+      g.fillText("EINWEISUNG", 48, 84);
+      g.fillText(res ? "ERGEBNIS" : "NÄCHSTER LAUF", 848, 84);
+      g.fillStyle = "#8d98ab";
+      g.font = "500 24px " + FONT;
+      g.textAlign = "right";
+      g.fillText(SET.laps + " Runden · Niveau " + ["Azubi", "Geselle", "Meister"][SET.level], 1552, 84);
+      g.textAlign = "left";
+      const fit = (tx, x, y, wide, px, wt) => {
+        for (; px > 14; px--) {
+          g.font = wt + " " + px + "px " + FONT;
+          if (g.measureText(tx).width <= wide) break;
+        }
+        g.fillText(tx, x, y);
+      };
+      const steps = ["Ins Kart setzen. Los geht es, wenn alle sitzen.", "Rückwärts aus der Box, durchs Tor auf die Strecke.", "Eine Runde bis in deine Startbox. Ampel aus: Start.",
+        "Nach der Zielflagge eine Runde ausrollen.", "Durchs Tor zurück, Nase voran auf deinen Platz."];
+      steps.forEach((tx, n) => {
+        const y = 160 + n * 64;
+        g.fillStyle = "#ff2e88";
+        g.font = "700 34px " + FONT;
+        g.fillText(String(n + 1), 48, y);
+        g.fillStyle = "#dfe6f2";
+        fit(tx, 96, y, 672, 30, "500");
+      });
+      const rh = Math.min(48, 290 / rows.length);
+      rows.forEach((r, n) => {
+        const y = 152 + n * rh;
+        g.fillStyle = "#" + r[3].toString(16).padStart(6, "0");
+        g.fillRect(848, y - 20, 8, 24);
+        g.fillStyle = r[4] ? "#ffffff" : "#c9d2e0";
+        g.font = (r[4] ? "700 " : "500 ") + Math.round(Math.min(32, rh * 0.76)) + "px " + FONT;
+        g.fillText(r[0], 872, y);
+        g.fillText(r[1], 940, y);
+        g.textAlign = "right";
+        g.fillStyle = r[2] === "sitzt" ? "#5dffa2" : r[2] === "fehlt noch" ? "#ff2e88" : res ? "#c9d2e0" : "#ffc247";
+        g.fillText(r[2], 1552, y);
+        g.textAlign = "left";
+      });
+      g.fillStyle = all ? "#5dffa2" : "#8d98ab";
+      g.font = "500 24px " + FONT;
+      g.fillText(res ? "Schnellste Runde je Fahrer." : all ? "Alle sitzen: Ausfahrt frei." : "Start, wenn alle im Kart sitzen.", 848, 458);
+      brief.tex.needsUpdate = true;
+    }
     const G2 = {
       state: "menu",
       paused: false,
@@ -8815,6 +8922,10 @@ void main(){
         else if (e.code === "KeyM") toggleMute();
         else if (e.code === "KeyL") nextLook();
         else if (e.code === "KeyJ") nextTrack();
+        return;
+      }
+      if (foot.desk) {
+        if (e.code === "Escape" || e.code === "Enter" || e.code === "KeyE") deskClose();
         return;
       }
       if (e.code === "KeyB") setGhost(true);
@@ -9018,6 +9129,8 @@ void main(){
       $2("menu").classList.remove("off");
       $2("results").classList.remove("on");
       $2("pause").classList.remove("on");
+      $2("book").classList.remove("on");
+      foot.desk = null;
       document.body.classList.remove("racing");
       refreshBest();
     }
@@ -9271,6 +9384,9 @@ void main(){
       audio.setMuted(ui.muted());
       parkKarts();
       crewInit();
+      brief.result = null;
+      foot.desk = null;
+      $2("book").classList.remove("on");
       G2.blend = null;
       setPit(false, false, false);
       fx.clearSkids();
@@ -9314,18 +9430,49 @@ void main(){
       const el = $2("w-hint"), act = $2("w-act");
       let text = "";
       if (foot.busy) text = "";
+      else if (foot.desk) text = "";
       else if (foot.near) text = DEVICE.touch ? "" : "<b>E</b>Einsteigen";
+      else if (foot.at === "desk") text = DEVICE.touch ? "" : "<b>E</b>Lauf buchen";
       else if (foot.moved < 4 && foot.hintT < 14) text = DEVICE.touch ? "Links gehen, rechts umsehen." : "<b>W A S D</b>gehen &nbsp; <b>Maus</b>umsehen (ins Bild klicken) &nbsp; <b>Shift</b>schneller";
-      else if (foot.moved < 60 && foot.hintT < 45) text = "Dein Kart ist das leere in der Reihe an der Strecke.";
+      else if (hallAsset && foot.moved < 22 && foot.hintT < 30) text = "Links am Empfang kannst du Runden, Gegner und Niveau wählen.";
+      else if (foot.moved < 80 && foot.hintT < 60) text = "Dein Kart ist das leere in der Reihe an der Strecke.";
       if (el.dataset.t !== text) {
         el.dataset.t = text;
         if (text) el.innerHTML = text;
         el.classList.toggle("on", !!text);
       }
-      act.classList.toggle("on", foot.near && !foot.busy);
+      const what = foot.near ? "Einsteigen" : "Lauf buchen";
+      if (act.textContent !== what) act.textContent = what;
+      act.classList.toggle("on", (foot.near || foot.at === "desk") && !foot.busy && !foot.desk);
+    }
+    function deskOpen() {
+      foot.desk = { opp: SET.opp, level: SET.level };
+      foot.vx = foot.vz = 0;
+      $2("book").classList.add("on");
+      if (document.pointerLockElement === canvas && document.exitPointerLock) document.exitPointerLock();
+      footHint();
+    }
+    function deskClose() {
+      const was = foot.desk;
+      if (!was) return;
+      foot.desk = null;
+      $2("book").classList.remove("on");
+      if (G2.state === "foot" && (was.opp !== SET.opp || was.level !== SET.level)) {
+        parkKarts();
+        crewInit();
+        setPit(false, false, false);
+        brief.result = null;
+      }
+      canvas.focus();
+      footHint();
     }
     function footAct() {
-      if (G2.state !== "foot" || G2.paused || foot.busy || !foot.near) return;
+      if (G2.state !== "foot" || G2.paused || foot.busy) return;
+      if (foot.desk) return deskClose();
+      if (!foot.near) {
+        if (foot.at === "desk") deskOpen();
+        return;
+      }
       crewCall(true);
       foot.busy = 1e-3;
       footHint();
@@ -9360,6 +9507,7 @@ void main(){
       document.body.classList.remove("walking");
       document.body.classList.add("racing");
       race.laps = SET.laps;
+      brief.result = null;
       for (let i = 0; i < race.karts.length; i++) {
         const k = race.karts[i], bb = bay(i);
         k.x = bb.x;
@@ -9430,6 +9578,7 @@ void main(){
     }
     function getOut() {
       $2("results").classList.remove("on");
+      brief.result = race.karts.map((k) => ({ pos: k.pos, name: k.driver.name, best: isFinite(k.best) ? fmtTime(k.best) : "–", color: k.driver.color, me: k === race.player })).sort((a, b) => a.pos - b.pos);
       G2.blend = { t: 0, dur: 0.8, x: cam.x, y: cam.y, z: cam.z, lx: cam.lx, ly: cam.ly, lz: cam.lz };
       G2.state = "foot";
       G2.visit = true;
@@ -9470,6 +9619,7 @@ void main(){
         return;
       }
       if (foot.busy < 0) return;
+      if (foot.desk) return;
       let f = (keys.has("KeyW") || keys.has("ArrowUp") ? 1 : 0) - (keys.has("KeyS") || keys.has("ArrowDown") ? 1 : 0);
       let sd = (keys.has("KeyD") ? 1 : 0) - (keys.has("KeyA") ? 1 : 0);
       let turn = (keys.has("ArrowLeft") ? 1 : 0) - (keys.has("ArrowRight") ? 1 : 0), nod = 0;
@@ -9580,6 +9730,7 @@ void main(){
       foot.z = z;
       foot.hintT += dt;
       foot.near = near;
+      foot.at = hallAsset && !near && foot.y < 1 && x > -57.75 && x < -56.1 && z > 49.3 && z < 54.7 ? "desk" : null;
       footHint();
     }
     function footCam(dt) {
@@ -9622,7 +9773,7 @@ void main(){
       });
       window.addEventListener("mouseup", () => foot.drag = false);
       window.addEventListener("mousemove", (e) => {
-        if (G2.state !== "foot" || G2.ghost || G2.paused || foot.busy || !(foot.drag || document.pointerLockElement === canvas)) return;
+        if (G2.state !== "foot" || G2.ghost || G2.paused || foot.busy || foot.desk || !(foot.drag || document.pointerLockElement === canvas)) return;
         foot.yaw -= (e.movementX || 0) * FOOT.look;
         foot.pitch = clamp(foot.pitch - (e.movementY || 0) * FOOT.look, -1.2, 1.2);
       });
@@ -9682,6 +9833,7 @@ void main(){
       lk.addEventListener("pointercancel", lkUp);
       $2("walk").addEventListener("contextmenu", (e) => e.preventDefault());
       $2("w-act").addEventListener("click", footAct);
+      $2("b-ok").addEventListener("click", deskClose);
       $2("w-pause").addEventListener("click", () => setPaused(true));
       window.addEventListener("blur", () => {
         mid = lid = null;
@@ -10056,6 +10208,7 @@ void main(){
         if (!afoot || race.state === "pit" && race.pitMode === "in") race.step(dt);
         handleEvents();
         crewUpdate(dt, G2.time);
+        briefUpdate(dt);
         if (G2.state === "outlap") {
           if (race.pitHold && crewSeated()) {
             race.pitHold = false;
@@ -10294,7 +10447,7 @@ void main(){
     $2("m-walk").disabled = false;
     attract();
     requestAnimationFrame(frame);
-    window.__ns = { crew, crewCall, crewSeated, FIG, enterHall, leaveKart, footAct, foot, FOOT, SITE, PIT, setPit, startOutlap, startInlap, getOut, applyLook, LOOKS, G: G2, SET, race, audio, world, cam, camera, renderer, post, scene, track, models, beginRace, attract, setPaused, hud, fx, keys, AIDriver, HULL, HIT, KP, Kart, stepKart, steerLimit, FEELS, setFeel, nextFeel, rig, AHEAD, nextAhead, PHYS, setPhys, SEATS, setSeat, nextSeat, BACK, DEVICE, touch };
+    window.__ns = { brief, deskOpen, deskClose, crew, crewCall, crewSeated, FIG, enterHall, leaveKart, footAct, foot, FOOT, SITE, PIT, setPit, startOutlap, startInlap, getOut, applyLook, LOOKS, G: G2, SET, race, audio, world, cam, camera, renderer, post, scene, track, models, beginRace, attract, setPaused, hud, fx, keys, AIDriver, HULL, HIT, KP, Kart, stepKart, steerLimit, FEELS, setFeel, nextFeel, rig, AHEAD, nextAhead, PHYS, setPhys, SEATS, setSeat, nextSeat, BACK, DEVICE, touch };
   }
   function buildEnv(renderer) {
     const THREE = window.THREE;
@@ -10352,9 +10505,9 @@ void main(){
       sync();
       syncs.push(sync);
     };
-    seg("m-laps", "laps", Number);
-    seg("m-opp", "opp", Number);
-    seg("m-level", "level", Number);
+    seg(["m-laps", "b-laps"], "laps", Number);
+    seg(["m-opp", "b-opp"], "opp", Number);
+    seg(["m-level", "b-level"], "level", Number);
     seg(["m-gfx", "p-gfx"], "gfx", String);
     seg(["m-ahead", "p-ahead"], "blick", String);
     seg(["m-seat", "p-seat"], "sitz", String);
