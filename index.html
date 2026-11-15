@@ -5,7 +5,7 @@
 <!-- Nachtschicht Grand Prix. (c) 2026. Alle Rechte vorbehalten. Kopieren, Veraendern, Weiterverbreiten und Einbetten nur mit schriftlicher Erlaubnis; siehe LICENSE.txt. -->
 <meta name="robots" content="noindex, nofollow">
 <script>(function(){var ok=["dyson96.github.io"],h=location.hostname,loc=h===""||h==="localhost"||h==="127.0.0.1"||h==="[::1]"||/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(h)||/\.local$/.test(h),own=loc||!ok.length||ok.indexOf(h)>=0,fr=false;try{fr=window.top!==window.self}catch(e){fr=true}if(!own||(fr&&!loc)){window.__LOCK=1;document.write('<meta charset="utf-8"><body style="margin:0;background:#050409;color:#ccd;font:16px/1.5 sans-serif;display:grid;place-items:center;height:100vh;text-align:center"><p>Nachtschicht Grand Prix l\u00e4uft nur auf seiner eigenen Adresse.<br><a style="color:#ff4fa0" href="https://dyson96.github.io/nachtschicht/">Zum Spiel</a></p></body>');document.close();if(window.stop)window.stop();}})();</script>
-<script>window.__BUILD="15.11.2026 03:30";</script>
+<script>window.__BUILD="15.11.2026 12:28";</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -2129,7 +2129,7 @@ body.touch .keys { display: none; }
       this.acc = 0;
       this.DT = 1 / 300;
     }
-    setup({ opponents = 5, laps = 3, level = 1, demo = false, seed = 1 }) {
+    setup({ opponents = 5, laps = 3, level = 1, demo = false, seed = 1, humans = [0], me = 0 }) {
       var _a2;
       const tr = this.track;
       this.laps = laps;
@@ -2147,17 +2147,22 @@ body.touch .keys { display: none; }
       const skills = [];
       for (let i = 0; i < opponents; i++) skills.push(lv.skill + lv.spread * (1 - 2 * i / Math.max(1, opponents - 1)) * 0.5 + (rnd() - 0.5) * 8e-3);
       skills.sort((a, b) => b - a);
+      let hi = 0, bi = 0;
+      this.flagged = false;
       for (let i = 0; i < n; i++) {
         const k = new Kart(i);
-        const isPlayer = !demo && i === 0;
-        const slot = isPlayer ? n - 1 : demo ? i : i - 1;
+        const human = !demo && humans.includes(i);
+        const isPlayer = human && i === me;
+        const slot = demo ? i : human ? n - humans.length + hi++ : bi++;
         const row = slot;
         const s = tr.L - 3.2 - row * 3.4;
         const d = row % 2 === 0 ? -1.7 : 1.7;
         k.place(tr, s, d, 0);
         k.lap = 0;
         k.slot = slot;
+        k.home = slot;
         k.driver = DRIVERS[i % DRIVERS.length];
+        k.human = human;
         k.isPlayer = isPlayer;
         k.lapStart = 0;
         k.lapTimes = [];
@@ -2169,14 +2174,14 @@ body.touch .keys { display: none; }
         k.progress = k.s - tr.L;
         k.wrong = 0;
         this.karts.push(k);
-        if (!isPlayer) {
-          const sk = (_a2 = skills[demo ? i % skills.length : i - 1]) != null ? _a2 : lv.skill;
+        if (!human) {
+          const sk = (_a2 = skills[demo ? i % skills.length : slot]) != null ? _a2 : lv.skill;
           const drv = new AIDriver(k, tr, this.vref, { skill: demo ? 0.93 + rnd() * 0.05 : sk, seed: seed * 31 + i });
           k.assist = 1;
           this.ai.push(drv);
         }
       }
-      this.player = demo ? null : this.karts[0];
+      this.player = demo ? null : this.karts[me] || null;
       this.trace = new Float32Array(Math.ceil(tr.L / 5) + 2).fill(NaN);
       this.updateOrder();
     }
@@ -2286,7 +2291,8 @@ body.touch .keys { display: none; }
       this.pitOut = false;
       this.pitHold = false;
       this.linkOff();
-      for (let i = this.ai.length - 1; i >= 0; i--) if (this.ai[i].k.isPlayer) this.ai.splice(i, 1);
+      for (let i = this.ai.length - 1; i >= 0; i--) if (this.ai[i].k.human) this.ai.splice(i, 1);
+      this.flagged = false;
       for (const k of this.karts) {
         const p = tr.project(k.x, k.z, k.idx, k._p, tr.N >> 1);
         k.idx = p.i;
@@ -2295,7 +2301,7 @@ body.touch .keys { display: none; }
         k.finishTime = NaN;
         k.y = 0;
         k.pitch = k.roll = k.u = k.v = k.r = 0;
-        k.hold = !k.isPlayer || !!this.autoPlayer;
+        k.hold = true;
         k.set = false;
         k.prevS = k.s;
         k.q = 0;
@@ -2373,10 +2379,11 @@ body.touch .keys { display: none; }
     }
     pitStep(dt) {
       const tr = this.track, L = tr.L, P = this.player, auto = !!this.autoPlayer, inn = this.pitMode === "in", lz = this.pit.lane, qOn = !!this.quali && !inn;
+      const self = (k) => k.human && !(auto && k === P);
       if (this.pitHold) {
         this.pitT = 0;
         this.pitOut = false;
-        if (P) P.hold = true;
+        for (const k of this.karts) if (k.human) k.hold = true;
         return;
       }
       this.pitT += dt;
@@ -2467,7 +2474,7 @@ body.touch .keys { display: none; }
             if (k.q < 2) all = false;
             else if (!inPit(k) && k.s > L - 75 && k.s < L - 30) close = true;
           }
-          const waitP = P && !auto && !P.set && (P.q === 1 || P.q === 0 && !P.hold && !inPit(P)) && this.pitT < 300;
+          const waitP = this.pitT < 300 && this.karts.some((k) => self(k) && !k.set && (k.q === 1 || k.q === 0 && !k.hold && !inPit(k)));
           if (all || close && !waitP || this.pitT > 330) this.qualiClose();
         }
       }
@@ -2603,15 +2610,15 @@ body.touch .keys { display: none; }
           if (dist < 0.6 && Math.abs(k.u) < 0.9 || last && dist < 0.35) park(k);
         }
       }
-      if (P && !auto && !P.set) {
+      for (const H of this.karts) if (self(H) && !H.set) {
         allSet = false;
-        if (inPit(P)) lane = true;
+        if (inPit(H)) lane = true;
         if (inn) {
-          if (Math.hypot(P.bx - P.x, P.bz - P.z) < 1.4 && Math.abs(P.u) < 1.2 || this.pitT > 300) park(P);
+          if (Math.hypot(H.bx - H.x, H.bz - H.z) < 1.4 && Math.abs(H.u) < 1.2 || this.pitT > 300) park(H);
         } else if (this.pitT > (qOn ? 420 : 260)) {
           if (!this.qDone) this.qualiClose();
-          box(P);
-        } else if (this.qDone && Math.hypot(P.gx - P.x, P.gz - P.z) < 1.5 && Math.abs(P.u) < 1.3) box(P);
+          box(H);
+        } else if (this.qDone && Math.hypot(H.gx - H.x, H.gz - H.z) < 1.5 && Math.abs(H.u) < 1.3) box(H);
       }
       this.pitOut = !lane;
       if (allSet) {
@@ -2712,6 +2719,10 @@ body.touch .keys { display: none; }
         if (!k.finished && k.lap > this.laps && !this.demo) {
           k.finished = true;
           k.finishTime = tCross;
+          if (!this.flagged) {
+            this.flagged = true;
+            this.events.push({ type: "flag", k });
+          }
           if (k.isPlayer) {
             this.state = "finished";
             this.events.push({ type: "finish", time: tCross });
@@ -8961,6 +8972,9 @@ void main(){
     const fx = new Effects(scene);
     const hud = new Hud(track);
     const race = new Race(track);
+    const hall = { host: true, run: { no: 1, kind: "demo", phase: "race", t: 0, flagT: 0 }, call: "" };
+    const RUN = hall.run;
+    const me = { in: "menu", seat: 0, run: 0 };
     status("Karts rollen aus der Box \u2026");
     await nextFrame();
     kartAsset = await loadKartAsset();
@@ -9176,7 +9190,7 @@ void main(){
       brief: [[-21.3, 50.3], [-20.2, 52.6], [-21.4, 54.6], [-12.3, 50.2], [-11.4, 52.8], [-12.4, 55], [-17.7, 49.6]],
       store: (j) => [-34.9 + j * 1.6, 55.5]
     };
-    const crewFigure = (i) => crew.list[i - 1] || (crew.list[i - 1] = makeFigure(i));
+    const crewFigure = (i) => crew.list[i] || (crew.list[i] = makeFigure(i));
     const kartSide = (k, d) => [k.x + Math.sin(k.th) * d, k.z + Math.cos(k.th) * d];
     function crewShow(f, on) {
       f.root.visible = f.mesh.visible = f.shadow.visible = on;
@@ -9199,7 +9213,7 @@ void main(){
         f.state = "off";
       }
       if (!crew.on) return;
-      for (let i = 1; i < race.karts.length; i++) {
+      for (let i = 0; i < race.karts.length; i++) if (!race.karts[i].human) {
         const f = crewFigure(i), sp = CREW.brief[(i - 1) % CREW.brief.length];
         models[i].setDriver(false);
         f.x = sp[0];
@@ -9211,7 +9225,6 @@ void main(){
         f.path = null;
         crewShow(f, true);
       }
-      for (let i = race.karts.length; i <= crew.list.length; i++) if (crew.list[i - 1]) crewShow(crew.list[i - 1], false);
     }
     const POD = SITE.podium;
     const podStep = (place) => POD.find((q) => q[7] === String(place + 1));
@@ -9231,12 +9244,12 @@ void main(){
       if (!crew.on) return;
       if (!force) {
         if (crew.called) return;
-        for (let i = 1; i < race.karts.length; i++) if (crewFigure(i).state !== "wait") return;
+        for (let i = 0; i < race.karts.length; i++) if (!race.karts[i].human) if (crewFigure(i).state !== "wait") return;
       }
       crew.called = true;
       if (crew.pod) crew.pod.phase = "done";
       const order = [];
-      for (let i = 1; i < race.karts.length; i++) order.push(i);
+      for (let i = 0; i < race.karts.length; i++) if (!race.karts[i].human) order.push(i);
       order.sort((a, b) => Math.hypot(crewFigure(a).x + 12, crewFigure(a).z - 46) - Math.hypot(crewFigure(b).x + 12, crewFigure(b).z - 46));
       let turn = 0;
       for (const i of order) {
@@ -9276,14 +9289,21 @@ void main(){
       f.speed = 1.9;
       crewShow(f, true);
     }
+    const crewReady = () => {
+      if (!crew.on) return true;
+      for (let i = 0; i < race.karts.length; i++) if (!race.karts[i].human && crewFigure(i).state !== "wait") return false;
+      return true;
+    };
+    const seat = (i) => i === me.seat && race.karts[i] && race.karts[i].human ? { booked: foot.booked || !hallAsset, helm: foot.helm || !hallAsset, sat: me.in === "kart" && me.run === RUN.no }
+      : { booked: true, helm: true, sat: !crew.on || crewFigure(i).state === "seated" };
     const crewSeated = () => {
       if (!crew.on) return true;
-      for (let i = 1; i < race.karts.length; i++) if (crewFigure(i).state !== "seated") return false;
+      for (let i = 0; i < race.karts.length; i++) if (!race.karts[i].human) if (crewFigure(i).state !== "seated") return false;
       return true;
     };
     function crewUpdate(dt, time) {
       if (!crew.on) return;
-      for (let i = 1; i < race.karts.length; i++) {
+      for (let i = 0; i < race.karts.length; i++) if (!race.karts[i].human) {
         const f = crewFigure(i), k = race.karts[i];
         if (f.state === "off" || f.state === "seated") {
           if (f.state === "seated" && race.state === "pit" && race.pitMode === "in" && k.set && (f.t += dt) > 1 + (i % 3) * 0.5) crewOut(i);
@@ -9346,17 +9366,17 @@ void main(){
       }
       const pod = crew.pod;
       if (pod && pod.phase !== "done") {
-        const me = pod.top.indexOf(0), names = pod.top.map((i, n) => n + 1 + ". " + race.karts[i].driver.name).join("   ");
+        const mine = pod.top.indexOf(me.seat), names = pod.top.map((i, n) => n + 1 + ". " + race.karts[i].driver.name).join("   ");
         if (pod.phase === "gather") {
-          if (G2.state === "foot" && pod.top.every((i) => i === 0 || crewFigure(i).state === "podium")) {
+          if (G2.state === "foot" && pod.top.every((i) => race.karts[i].human || crewFigure(i).state === "podium")) {
             pod.phase = "stand";
             pod.t = 0;
-            pod.end = me >= 0 ? 45 : 9;
-            footSay(me >= 0 ? "Siegerehrung: Du bist Platz " + (me + 1) + ". Dein Platz auf dem Podest ist frei (am Ende der Boxenreihe)." : "Siegerehrung: " + names, 9);
+            pod.end = mine >= 0 ? 45 : 9;
+            footSay(mine >= 0 ? "Siegerehrung: Du bist Platz " + (mine + 1) + ". Dein Platz auf dem Podest ist frei (am Ende der Boxenreihe)." : "Siegerehrung: " + names, 9);
           }
         } else {
           pod.t += dt;
-          const q = me >= 0 ? podStep(me) : null;
+          const q = mine >= 0 ? podStep(mine) : null;
           if (q && !pod.up && foot.x > q[0] && foot.x < q[2] && foot.z > q[1] && foot.z < q[3] && foot.y > q[5] - 0.05) {
             pod.up = true;
             pod.end = pod.t + 7;
@@ -9366,7 +9386,7 @@ void main(){
             pod.phase = "done";
             let turn = 0;
             for (const i of pod.top) {
-              const f = i > 0 ? crewFigure(i) : null;
+              const f = !race.karts[i].human ? crewFigure(i) : null;
               if (!f || f.state !== "podium") continue;
               crewGo(f, [[f.x, 44.15], [-29, 44.8], [-29, 46.6], [-29 + (i % 3 - 1) * 0.5, 48.4], CREW.store(i - 1)], "wait");
               f.wait = turn++ * 0.9;
@@ -9426,10 +9446,10 @@ void main(){
       const res = brief.result && !crew.called ? brief.result : null;
       const STATE = { wait: "wartet", walk: "unterwegs", enter: "steigt ein", seated: "sitzt" };
       const rows = res ? res.map((r) => [r.pos + ".", r.name, r.best, r.color, r.me]) : race.karts.map((k, i) => [String(i + 1), k.driver.name,
-        i === 0 ? G2.state === "foot" ? "fehlt noch" : "sitzt" : crew.on ? STATE[crewFigure(i).state] || "" : "sitzt", k.driver.color, i === 0]);
+        k.human ? seat(i).sat ? "sitzt" : "fehlt noch" : crew.on ? STATE[crewFigure(i).state] || "" : "sitzt", k.driver.color, i === me.seat]);
       const all = !res && rows.every((r) => r[2] === "sitzt");
       const FONT = SCREEN_FONT;
-      const sig = JSON.stringify([rows, SET.laps, SET.level, SET.quali, !!res, guide.call, guide.step, !!(document.fonts && document.fonts.check('700 30px "Chakra Petch"'))]);
+      const sig = JSON.stringify([rows, SET.laps, SET.level, SET.quali, !!res, hall.call, guide.step, !!(document.fonts && document.fonts.check('700 30px "Chakra Petch"'))]);
       if (sig === brief.sig) return;
       brief.sig = sig;
       const g = brief.ctx;
@@ -9493,15 +9513,15 @@ void main(){
       });
       g.fillStyle = all ? "#5dffa2" : "#8d98ab";
       g.font = "500 24px " + FONT;
-      if (guide.call) {
+      if (hall.call) {
         g.fillStyle = "#ff2e88";
         g.font = "700 26px " + FONT;
-        g.fillText(guide.call, 848, 458, 704);
+        g.fillText(hall.call, 848, 458, 704);
       } else g.fillText(res ? "Schnellste Runde je Fahrer." : all ? "Alle sitzen: Ausfahrt frei." : "Start, wenn alle im Kart sitzen.", 848, 458);
       brief.tex.needsUpdate = true;
     }
     const info = { made: false, t: 0, left: null, right: null, lsig: "", rsig: "", gsig: "", laps: [], q: [], ev: null, evT: 0 };
-    const guide = { stage: "", run: 1, brief: 0, step: -1, call: "", dash: "", goal: "", t: 0, deny: 0 };
+    const guide = { stage: "", brief: 0, step: -1, dash: "", goal: "", t: 0, deny: 0 };
     const BRIEF_STEP = 2.2;
     const STELE = {}, TERMS = SITE.blocks.filter((q) => q[6] === "terminal");
     for (const q of SITE.blocks) if (q[6] === "info") STELE[q[8]] = q;
@@ -9528,10 +9548,6 @@ void main(){
         else if (!foot.booked) s = "checkin";
         else if (!foot.helm) s = "helm";
         else s = "karts";
-        if (foot.booked && foot.helm && !crew.called) {
-          crewCall();
-          if (crew.called) voiceSay("aufruf", "halle", { key: "karts" });
-        }
       } else if (st === "outlap") s = race.pitHold ? "warten" : P && P.z > 33.3 && P.x < 20.3 ? "ausfahrt" : "strecke";
       else if (st === "grid") s = "start";
       else if (st === "race") s = "rennen";
@@ -9550,18 +9566,14 @@ void main(){
           if (voiceSay(id, "raum", { at: STELE.einweisung, now: true, done: () => { guide.brief = Math.min(guide.brief, 0.4); } })) guide.brief = 14;
         } else if (guide.brief <= 0) guide.step = -1;
       }
-      const R = "LAUF " + guide.run + " · ";
-      guide.call = !s ? "" : ({ checkin: R + "CHECK-IN GEÖFFNET", helm: R + "FAHRER ZUR AUSRÜSTUNG", karts: R + "FAHRER ZU DEN KARTS",
-        warten: R + "FAHRER STEIGEN EIN", ausfahrt: R + "BOXENAUSFAHRT FREI", strecke: R + (race.quali && !race.qDone ? "ZEITFAHREN" : "STARTAUFSTELLUNG"), start: R + "START", rennen: R + "RENNEN LÄUFT",
-        ziel: R + "ZIELFLAGGE", einfahrt: R + "ZIELFLAGGE · FAHRER IN DIE BOX", platz: R + "ZIELFLAGGE · FAHRER IN DIE BOX", aussteigen: R + "BEENDET", ehrung: "SIEGEREHRUNG AM PODEST" })[s] || "";
       let d = "";
       if (P && s === "warten") d = "WARTEN: AUSFAHRT ROT";
       else if (P && s === "ausfahrt") {
-        const bb = bay(0);
+        const bb = bay(me.seat);
         d = Math.hypot(P.x - bb.x, P.z - bb.z) < 2.2 ? "RÜCKWÄRTS AUSPARKEN" : "ZUR AUSFAHRT";
       } else if (s === "einfahrt") d = "BOX: RECHTS REIN";
       else if (s === "platz") d = "ZU DEINEM PLATZ";
-      else if (P && s === "aussteigen") d = "PLATZ " + (race.final ? race.final[0] : P.pos) + " · AUSSTEIGEN";
+      else if (P && s === "aussteigen") d = "PLATZ " + (race.final ? race.final[me.seat] : P.pos) + " · AUSSTEIGEN";
       else if (P && s === "strecke" && race.quali && P.q === 2 && LINK.n) {
         d = P.link ? LINK.s1 < LINK.len ? "WARTEN: ZEITEN LAUFEN" : "ZUR STARTBOX" : LINK.wantIn && P.s > 20 && P.s < LINK.sE + 2 ? "ABKÜRZUNG: GERADEAUS" : "";
       }
@@ -9611,7 +9623,7 @@ void main(){
       if (voice.log.length > 40) voice.log.shift();
       if (how === "helm" && !(foot.helm || G2.state !== "foot")) return false;
       if (!voiceCan(id) || voice.q.some((it) => it.id === id) || voice.on && voice.on.id === id) return false;
-      const it = { id, how, at: opt.at || null, key: opt.key || "", done: opt.done || null, t: guide.t };
+      const it = { id, how, at: opt.at || null, key: opt.key || "", run: opt.run || "", done: opt.done || null, t: guide.t };
       if (opt.now) voice.q.unshift(it);
       else voice.q.push(it);
       voiceBuf(id);
@@ -9719,43 +9731,47 @@ void main(){
       const s = guide.stage, P = race.player, first = race.order && race.order[0];
       if (s !== voice.key && (voice.state === 2 || !s)) {
         voice.key = s;
-        if (s === "checkin") voiceSay(guide.run > 1 ? "naechster" : "willkommen", guide.run > 1 ? "halle" : "raum", { key: s });
+        if (s === "checkin" && RUN.no === 1) voiceSay("willkommen", "raum", { key: s });
         else if (s === "warten") voiceSay("helm_warten", "helm", { key: s });
-        else if (s === "ausfahrt") {
-          voiceSay("helm_los", "helm", { key: s });
-          voiceSay("ausfahrt", "halle", { key: s });
-        } else if (s === "ziel") {
-          voiceSay("ziel", "halle");
+        else if (s === "ausfahrt") voiceSay("helm_los", "helm", { key: s });
+        else if (s === "ziel") {
           const pos = P ? P.pos : 9;
           voiceSay(pos === 1 ? "helm_sieg" : pos <= 3 ? "helm_podest" : "helm_ziel", "helm");
         } else if (s === "aussteigen") voiceSay("helm_fertig", "helm", { key: s });
-        else if (s === "ehrung") voiceSay("ehrung", "halle", { key: s });
-        voice.q1 = voice.lap = false;
+        voice.q1 = false;
       }
       if (s === "strecke" && P) {
         const q = race.quali ? P.q || 0 : 2;
         if (q === 1 && !voice.q1) voiceSay("helm_zeit", "helm");
         const cut = race.quali && LINK.n > 0;
-        if (q === 2 && voice.q2 !== guide.run) {
+        if (q === 2 && voice.q2 !== RUN.no) {
           voiceSay(cut ? "helm_abk" : "helm_startbox", "helm");
-          voice.q2 = guide.run;
-          voice.q3 = cut ? 0 : guide.run;
+          voice.q2 = RUN.no;
+          voice.q3 = cut ? 0 : RUN.no;
           voice.q4 = 0;
         }
-        if (q === 2 && voice.q4 !== guide.run && P.link && LINK.s1 < LINK.len && Math.abs(P.u) < 1 && P.s - LINK.sE > LINK.sG - 9) {
+        if (q === 2 && voice.q4 !== RUN.no && P.link && LINK.s1 < LINK.len && Math.abs(P.u) < 1 && P.s - LINK.sE > LINK.sG - 9) {
           voiceSay("helm_abk_warten", "helm");
-          voice.q4 = guide.run;
+          voice.q4 = RUN.no;
         }
-        if (q === 2 && voice.q3 !== guide.run && !P.link && P.s > track.L - 60) {
+        if (q === 2 && voice.q3 !== RUN.no && !P.link && P.s > track.L - 60) {
           voiceSay("helm_startbox", "helm");
-          voice.q3 = guide.run;
+          voice.q3 = RUN.no;
         }
         voice.q1 = q >= 1;
       }
-      if (s === "rennen" && !voice.lap && !race.demo && first && first.lap >= race.laps && race.laps > 1) {
+      if (RUN.phase !== "race") voice.lap = false;
+      else if (!voice.lap && !race.demo && first && first.lap >= race.laps && race.laps > 1) {
         voice.lap = true;
-        voiceSay("letzte", "halle", { key: s });
+        voiceSay("letzte", "halle", { run: "race" });
       }
+      const pod = RUN.kind === "visit" && RUN.phase === "open" && !!brief.result && !!crew.pod && crew.pod.phase !== "done";
+      if (pod && !voice.pod) voiceSay("ehrung", "halle", { run: "open" });
+      else if (!pod && voice.next !== RUN.no && RUN.kind === "visit" && RUN.phase === "open" && RUN.no > 1 && voice.state === 2) {
+        voice.next = RUN.no;
+        voiceSay("naechster", "halle", { run: "open" });
+      }
+      voice.pod = pod;
       const bare = G2.state === "foot" && foot.near && (!foot.booked || !foot.helm);
       if (bare && !voice.bare) voiceSay(!foot.booked ? "erst_checkin" : "ohnehelm", !foot.booked && foot.helm ? "helm" : "raum", { at: STELE.box });
       voice.bare = bare;
@@ -9763,7 +9779,7 @@ void main(){
       if (voice.gap > 0) voice.gap -= dt;
       if (voice.on || voice.gap > 0 || !voice.q.length) return;
       const it = voice.q[0];
-      if (it.key && it.key !== guide.stage || guide.t - it.t > 12 || !voiceCan(it.id)) {
+      if (it.key && it.key !== guide.stage || it.run && it.run !== RUN.phase || guide.t - it.t > 12 || !voiceCan(it.id)) {
         voice.q.shift();
         return;
       }
@@ -9798,7 +9814,7 @@ void main(){
     };
     function steleDraw() {
       const FONT = SCREEN_FONT, said = voice.on ? voice.on.id : "";
-      const sig = JSON.stringify([foot.booked, guide.run, guide.step, said, !!(document.fonts && document.fonts.check('700 30px "Chakra Petch"'))]);
+      const sig = JSON.stringify([foot.booked, runBook(), guide.step, said, !!(document.fonts && document.fonts.check('700 30px "Chakra Petch"'))]);
       if (sig === stele.sig) return;
       stele.sig = sig;
       let g = stele.term.ctx;
@@ -9815,7 +9831,7 @@ void main(){
       g.fillText("CHECK-IN", 256, 250);
       g.fillStyle = "#35d8ff";
       g.font = "600 34px " + FONT;
-      g.fillText("LAUF " + guide.run, 256, 310);
+      g.fillText("LAUF " + runBook(), 256, 310);
       if (foot.booked) {
         g.fillStyle = "#b8ff3a";
         g.font = "700 46px " + FONT;
@@ -10124,27 +10140,28 @@ void main(){
       }
       const lead = race.order && race.order[0] || karts[0], P = race.player;
       let title = "E-KART GRAND PRIX", order = [], kind = "", gan = "START / ZIEL", flag = false, idle = "";
-      if (st === "race" || st === "finished" || st === "menu" && racing) {
+      const ph = RUN.phase, vis = RUN.kind === "visit";
+      if (ph === "race" && (racing || !vis)) {
         order = (race.order || karts).map((k) => [k, 1]);
-        const over = st === "finished" || race.state === "finished" || P && P.finished, last = !race.demo && lead && lead.lap >= race.laps;
+        const over = !!race.flagged, last = !race.demo && lead && lead.lap >= race.laps;
         title = race.demo ? "E-KART GRAND PRIX" : over ? "ZIEL" : last ? "LETZTE RUNDE" : "RUNDE " + clamp(lead ? lead.lap : 1, 1, race.laps) + "/" + race.laps;
         gan = race.demo ? "START / ZIEL" : over ? "ZIEL" : last ? "LETZTE RUNDE" : "RUNDE " + clamp(lead ? lead.lap : 1, 1, race.laps) + " / " + race.laps;
         kind = over ? "" : last ? "hot" : "";
         flag = !race.demo && !!over;
         idle = isFinite(runBest) ? "SCHNELLSTE RUNDE " + fmtTime(runBest) : "";
-      } else if (st === "grid") {
+      } else if (ph === "grid") {
         order = karts.slice().sort((a, b) => a.slot - b.slot).map((k) => [k, 1]);
         title = "START";
         gan = race.laps + " RUNDEN";
         idle = race.laps + " RUNDEN";
-      } else if (st === "outlap") {
+      } else if (vis && (ph === "board" || ph === "out")) {
         const timing = race.quali && !race.qDone;
         order = karts.slice().sort((a, b) => timing ? (a.qTime - b.qTime || a.slot - b.slot) : a.slot - b.slot).map((k) => [k, !timing || isFinite(k.qTime) ? 1 : 0.3]);
         title = gan = timing ? "ZEITFAHREN" : "STARTAUFSTELLUNG";
         kind = timing ? "hot" : "";
         const bq = Math.min.apply(null, karts.map((k) => k.qTime));
         idle = race.quali && isFinite(bq) ? "SCHNELLSTE ZEIT " + fmtTime(bq) : "";
-      } else if (st === "inlap") {
+      } else if (vis && ph === "in") {
         order = karts.map((k, i) => [k, race.final ? race.final[i] : k.pos]).sort((a, b) => a[1] - b[1]).map((q) => [q[0], 1]);
         title = "ZIEL \u00b7 AUSLAUFRUNDE";
         gan = "ZIEL";
@@ -10268,7 +10285,7 @@ void main(){
       const Uw = world.U;
       if (!Uw || !Uw.uFlag) return;
       Uw.uFlagT.value = G2.time;
-      const st = G2.state, racing = race.state === "racing" && st === "race" && !race.demo, L = track.L;
+      const st = G2.state, racing = race.state === "racing" && RUN.phase === "race" && !race.demo, L = track.L;
       const green = racing && race.time < 3 ? 1 : 0;
       flag.ft = !race.demo && (st === "finished" || st === "inlap") ? (flag.ft || 0) + dt : 0;
       const fin = flag.ft > 0 && flag.ft < 12 ? 1 : 0;
@@ -10442,7 +10459,7 @@ void main(){
     function boardDraw() {
       const W = 1200, H = 537, FONT = SCREEN_FONT, g = brief.board.ctx;
       const day = Object.keys(brief.day).map((n) => [n, brief.day[n]]).sort((a, b) => a[1] - b[1]).slice(0, 8);
-      const sig = JSON.stringify([brief.last, day, SET.best, SET.laps, SET.opp, guide.call, !!(document.fonts && document.fonts.check('700 30px "Chakra Petch"'))]);
+      const sig = JSON.stringify([brief.last, day, SET.best, SET.laps, SET.opp, hall.call, !!(document.fonts && document.fonts.check('700 30px "Chakra Petch"'))]);
       if (sig === brief.bsig) return;
       brief.bsig = sig;
       g.setTransform(g.canvas.width / W, 0, 0, g.canvas.height / H, 0, 0);
@@ -10463,10 +10480,10 @@ void main(){
       g.textAlign = "right";
       g.fillStyle = "#8d98ab";
       g.font = "500 27px " + FONT;
-      if (guide.call) {
+      if (hall.call) {
         g.fillStyle = "#ff2e88";
         g.font = "700 34px " + FONT;
-        g.fillText(guide.call, 1164, 76, 700);
+        g.fillText(hall.call, 1164, 76, 700);
       } else g.fillText("N\u00e4chster Lauf: " + SET.laps + " Runden \u00b7 " + (SET.opp + 1) + " Fahrer", 1164, 74);
       const col = (x, title, rows, none) => {
         g.textAlign = "left";
@@ -10498,7 +10515,6 @@ void main(){
       brief.board.tex.needsUpdate = true;
     }
     const G2 = {
-      state: "menu",
       paused: false,
       time: 0,
       camMode: SET.cam,
@@ -10520,6 +10536,17 @@ void main(){
       rubT: 0,
       kerb: 0
     };
+    Object.defineProperty(G2, "state", {
+      get() {
+        if (me.in !== "kart") return me.in;
+        if (me.run !== RUN.no) return "inlap";
+        const ph = RUN.phase;
+        return ph === "grid" ? "grid" : ph === "race" ? race.player && race.player.finished ? "finished" : "race" : ph === "in" ? "inlap" : "outlap";
+      },
+      set(v) {
+        if (v === "race") runSet("race");
+      }
+    });
     const cam = { x: 0, y: 5, z: 0, th: 0, lx: 0, ly: 0, lz: 0, fov: 66, roll: 0, init: false };
     const tmp = { i: 0, s: 0, d: 0, along: 0 };
     const lightOut = [0, 0, 0];
@@ -10748,7 +10775,9 @@ void main(){
     }
     function attract() {
       setGhost(false);
-      G2.state = "menu";
+      me.in = "menu";
+      RUN.kind = "demo";
+      RUN.phase = "race";
       G2.paused = false;
       G2.visit = false;
       G2.blend = null;
@@ -10818,7 +10847,11 @@ void main(){
       G2.blend = null;
       setPit(false, false, false);
       fx.clearSkids();
-      G2.state = "grid";
+      me.in = "kart";
+      me.run = RUN.no;
+      RUN.kind = "quick";
+      RUN.phase = "grid";
+      RUN.t = 0;
       G2.paused = false;
       G2.gridT = 0;
       G2.finishT = 0;
@@ -10942,7 +10975,7 @@ void main(){
         ghost.drag = false;
         ghost.held = (G2.state === "race" || G2.state === "grid" || G2.state === "outlap" || G2.state === "inlap") && !G2.paused;
         if (ghost.held) setPaused(true);
-        models[0].setOnboard(false);
+        models[me.seat].setOnboard(false);
         const u = post.mOut.uniforms;
         u.uSpeed.value = 0;
         ghostSpeed(ghost.speed);
@@ -11022,7 +11055,7 @@ void main(){
     }, { passive: false });
     const FOOT = { eye: 1.68, r: 0.35, walk: 2.3, run: 4.8, look: 22e-4, reach: 2.4, fov: 62, door: hallAsset ? SITE.start : [-49, 55.4, Math.PI] };
     const foot = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, vx: 0, vz: 0, dist: 0, moved: 0, near: false, busy: 0, drag: false, sx: 0, sy: 0, hintT: 0, pad: false };
-    const bay = (i) => SITE.bays[7 - (i === 0 ? race.karts.length - 1 : i - 1) % 8];
+    const bay = (i) => SITE.bays[7 - race.karts[i].home % 8];
     const lowTrack = [];
     for (let i = 0; i < track.N; i++) if (track.Y[i] < 2.3) lowTrack.push(i);
     function parkKarts() {
@@ -11037,7 +11070,7 @@ void main(){
         k.pitch = k.roll = k.u = k.v = k.r = k.steer = k.ax = k.ay = 0;
       }
       showKarts();
-      models[0].setDriver(false);
+      models[me.seat].setDriver(false);
     }
     const fade = (on) => $2("fade").classList.toggle("on", on);
     function enterHall(at) {
@@ -11051,7 +11084,11 @@ void main(){
       race.final = null;
       foot.desk = null;
       foot.helm = foot.back = false;
-      guide.run = 1;
+      RUN.no = 1;
+      RUN.kind = hallAsset ? "visit" : "quick";
+      RUN.phase = "open";
+      RUN.t = 0;
+      me.run = 0;
       foot.booked = false;
       voice.key = "?";
       voice.q.length = 0;
@@ -11063,7 +11100,7 @@ void main(){
       G2.blend = null;
       setPit(false, false, false);
       fx.clearSkids();
-      G2.state = "foot";
+      me.in = "foot";
       G2.paused = false;
       G2.visit = true;
       audio.outsideTarget = 1;
@@ -11077,7 +11114,7 @@ void main(){
       document.body.classList.remove("racing");
       document.body.classList.add("walking");
       if (at) {
-        const k = race.karts[0], c = Math.cos(k.th), sn = Math.sin(k.th);
+        const k = race.player, c = Math.cos(k.th), sn = Math.sin(k.th);
         foot.x = k.x + sn * 1.25 - c * 0.2;
         foot.z = k.z + c * 1.25 + sn * 0.2;
         foot.yaw = Math.atan2(k.x - foot.x, k.z - foot.z);
@@ -11172,6 +11209,8 @@ void main(){
       if (G2.state === "foot" && (was.opp !== SET.opp || was.level !== SET.level)) {
         parkKarts();
         crewInit();
+        RUN.phase = "open";
+        RUN.t = 0;
         setPit(false, false, false);
         brief.result = null;
       }
@@ -11208,7 +11247,7 @@ void main(){
         return;
       }
       if (hallAsset && (!foot.helm || !foot.booked)) return;
-      crewCall(true);
+      runHurry();
       foot.busy = 1e-3;
       footHint();
     }
@@ -11236,27 +11275,156 @@ void main(){
       slotMark.visible = false;
       scene.add(slotMark);
     }
-    function startOutlap() {
+    const allSat = () => {
+      for (let i = 0; i < race.karts.length; i++) if (!seat(i).sat) return false;
+      return true;
+    };
+    const runBook = () => RUN.phase === "open" || RUN.phase === "board" ? RUN.no : RUN.no + 1;
+    function resultSheet() {
+      const p = race.player;
+      fillResults(race.results(), race.laps);
+      $2("r-title").textContent = p.pos === 1 ? "Schichtsieger" : "Schichtprotokoll";
+      $2("r-sub").textContent = `Platz ${p.pos} von ${race.karts.length} nach ${race.laps} Runden. Deine schnellste Runde: ${isFinite(p.best) ? fmtTime(p.best) : "\u2013"}.`;
+    }
+    function runSet(phase, force) {
+      const P = race.player, mine = me.in === "kart", welt = document.body.classList.contains("welt");
+      RUN.phase = phase;
+      RUN.t = 0;
+      RUN.flagT = 0;
+      if (phase === "open") setPit(false, false, false);
+      else if (phase === "board") {
+        race.laps = SET.laps;
+        brief.result = null;
+        for (let i = 0; i < race.karts.length; i++) {
+          const k = race.karts[i], bb = bay(i);
+          k.x = bb.x;
+          k.z = bb.z;
+          k.th = bb.th;
+        }
+        race.pitBegin(SITE.pit, SET.quali !== "ohne");
+        race.pitHold = true;
+        setPit(true, false, false);
+        crewCall(!!force);
+        voiceSay("aufruf", "halle", { run: phase });
+      } else if (phase === "out") {
+        race.pitHold = false;
+        for (let i = 0; i < race.karts.length; i++) {
+          const k = race.karts[i];
+          if (k.human && !(race.autoPlayer && k === P) && seat(i).sat) k.hold = false;
+        }
+        setPit(true, true, false);
+        voiceSay("ausfahrt", "halle", { run: phase });
+        if (mine) {
+          hud.message("Boxenausfahrt offen", "", 2.6);
+          note(welt ? DEVICE.touch ? "Bremse halten: r\xFCckw\xE4rts" : "S oder ↓: r\xFCckw\xE4rts" : G2.outHow);
+        }
+      } else if (phase === "grid") {
+        race.regrid();
+        setPit(false, false, false);
+        G2.gridT = 2.6;
+        G2.finishT = 0;
+        G2.lightsShown = -1;
+        audio.armStart();
+        hud.lights(0, false);
+        hud.message("Bereit machen", "", 2.2);
+        world.setStartLights(0, false);
+      } else if (phase === "race") {
+        world.setStartLights(0, true);
+        hud.lights(5, true);
+        hud.message("Los", "hot", 1.1);
+        audio.beep(1320, 0.5, 0.28);
+        setTimeout(() => hud.lights(0, false), 1500);
+      } else if (phase === "in") {
+        race.pitIn(SITE.pit, bay);
+        race.final = race.karts.map((k) => k.pos);
+        crew.called = false;
+        crew.pod = crew.on && race.karts.length > 3 ? { phase: "gather", t: 0, end: 0, up: false, top: [1, 2, 3].map((p) => race.final.indexOf(p)) } : null;
+        brief.result = brief.last = race.karts.map((k, i) => ({ pos: race.final ? race.final[i] : k.pos, name: k.driver.name, best: isFinite(k.best) ? fmtTime(k.best) : "–", color: k.driver.color, me: k === race.player })).sort((a, b) => a.pos - b.pos);
+        for (const k of race.karts) if (isFinite(k.best) && k.best > 0 && !(brief.day[k.driver.name] <= k.best)) brief.day[k.driver.name] = k.best;
+        if (mine && P) {
+          resultSheet();
+          hud.message("Zielflagge", "hot", 2.4);
+          if (!welt) note("Auslaufrunde: zur\xFCck in die Box, dein Platz ist markiert");
+          const bb = bay(me.seat);
+          slotMark.position.set(bb.x, 0, bb.z);
+          slotMark.rotation.y = bb.th;
+          slotMark.visible = SET.anzeige === "klassisch";
+        }
+      }
+    }
+    function runCall() {
+      if (RUN.kind !== "visit" || !hallAsset) return "";
+      const R = "LAUF " + RUN.no + " \xB7 ", ph = RUN.phase, n = race.karts.length;
+      if (ph === "open") {
+        if (brief.result && crew.pod && crew.pod.phase !== "done") return "SIEGEREHRUNG AM PODEST";
+        for (let i = 0; i < n; i++) {
+          const q = seat(i);
+          if (q.booked && !q.helm) return R + "FAHRER ZUR AUSR\xDCSTUNG";
+        }
+        return R + "CHECK-IN GE\xD6FFNET";
+      }
+      if (ph === "board") {
+        for (let i = 0; i < n; i++) if (race.karts[i].human && seat(i).sat) return R + "FAHRER STEIGEN EIN";
+        return R + "FAHRER ZU DEN KARTS";
+      }
+      if (ph === "out") return R + (!race.pitOut ? "BOXENAUSFAHRT FREI" : race.quali && !race.qDone ? "ZEITFAHREN" : "STARTAUFSTELLUNG");
+      if (ph === "grid") return R + "START";
+      if (ph === "race") return R + (race.flagged ? "ZIELFLAGGE" : "RENNEN L\xC4UFT");
+      return R + "ZIELFLAGGE \xB7 FAHRER IN DIE BOX";
+    }
+    function runStep(dt) {
+      RUN.t += dt;
+      if (hall.host && RUN.kind === "visit" && hallAsset) runDecide(dt);
+      hall.call = runCall();
+    }
+    function runDecide(dt) {
+      const ph = RUN.phase, ks = race.karts;
+      if (ph === "open") {
+        let ready = false;
+        for (let i = 0; i < ks.length; i++) if (ks[i].human) {
+          const q = seat(i);
+          if (q.booked && q.helm) ready = true;
+        }
+        if (ready && crewReady()) runSet("board");
+      } else if (ph === "board") {
+        if (allSat()) runSet("out");
+      } else if (ph === "out") {
+        if (race.pitOut && PIT.open) setPit(false, false, false);
+        if (race.formed) runSet("grid");
+      } else if (ph === "race") {
+        let over = true;
+        for (const k of ks) if (k.human && !k.finished) over = false;
+        if (over && (RUN.flagT += dt) > 3.4) runSet("in");
+      } else if (ph === "in") {
+        if (!race.entryOpen && race.pitT > 2) {
+          setPit(true, false, true);
+          race.entryOpen = true;
+        } else if (race.parkedAll) {
+          RUN.no++;
+          runSet("open");
+        }
+      }
+    }
+    function runHurry() {
+      if (RUN.kind !== "visit" || !hallAsset) return;
+      if (RUN.phase === "in") {
+        RUN.no++;
+        RUN.phase = "open";
+      }
+      if (RUN.phase === "open") runSet("board", true);
+      else if (RUN.phase === "board") crewCall(true);
+    }
+    function meSit() {
+      runHurry();
+      me.in = "kart";
+      me.run = RUN.no;
       G2.blend = { t: 0, dur: 0.9, x: cam.x, y: cam.y, z: cam.z, lx: cam.lx, ly: cam.ly, lz: cam.lz };
-      models[0].setDriver(true);
+      models[me.seat].setDriver(true);
       document.body.classList.remove("walking");
       document.body.classList.add("racing");
-      race.laps = SET.laps;
-      brief.result = null;
-      for (let i = 0; i < race.karts.length; i++) {
-        const k = race.karts[i], bb = bay(i);
-        k.x = bb.x;
-        k.z = bb.z;
-        k.th = bb.th;
-      }
       G2.parked = false;
-      race.pitBegin(SITE.pit, SET.quali !== "ohne");
       G2.qSeen = 0;
       G2.qShown = false;
-      crewCall(true);
-      race.pitHold = !crewSeated();
-      setPit(true, !race.pitHold, false);
-      G2.state = "outlap";
       G2.visit = true;
       G2.finishT = 0;
       G2.outHint = 0;
@@ -11267,41 +11435,13 @@ void main(){
       hud.lights(0, false);
       const how = (DEVICE.touch ? "R\xFCckw\xE4rts aus der Box (Bremse halten)" : "R\xFCckw\xE4rts aus der Box (S oder \u2193)") + (race.quali ? ", aufw\xE4rmen bis zur Linie: Dann z\xE4hlt eine Runde auf Zeit" : ", dann eine Runde zu Startbox " + (race.player.slot + 1));
       G2.outHow = how;
-      if (race.pitHold) hud.message("Die anderen steigen ein", "", 2.6);
-      else {
-        hud.message("Boxenausfahrt offen", "", 2.6);
-        note(document.body.classList.contains("welt") ? DEVICE.touch ? "Bremse halten: r\xFCckw\xE4rts" : "S oder \u2193: r\xFCckw\xE4rts" : how);
-      }
+      if (allSat()) runSet("out");
+      else hud.message("Die anderen steigen ein", "", 2.6);
       const k = race.player;
       slotMark.position.set(k.gx, 0, k.gz);
       slotMark.rotation.y = 0;
       slotMark.visible = !race.quali && SET.anzeige === "klassisch";
       canvas.focus();
-    }
-    function armGrid() {
-      race.regrid();
-      setPit(false, false, false);
-      G2.state = "grid";
-      G2.gridT = 2.6;
-      G2.finishT = 0;
-      G2.lightsShown = -1;
-      audio.armStart();
-      hud.lights(0, false);
-      hud.message("Bereit machen", "", 2.2);
-      world.setStartLights(0, false);
-    }
-    function startInlap() {
-      race.pitIn(SITE.pit, bay);
-      race.final = race.karts.map((k) => k.pos);
-      crew.called = crew.armed = false;
-      crew.pod = crew.on && race.karts.length > 3 ? { phase: "gather", t: 0, end: 0, up: false, top: [1, 2, 3].map((p) => race.final.indexOf(p)) } : null;
-      G2.state = "inlap";
-      hud.message("Zielflagge", "hot", 2.4);
-      if (!document.body.classList.contains("welt")) note("Auslaufrunde: zur\xFCck in die Box, dein Platz ist markiert");
-      const bb = bay(0);
-      slotMark.position.set(bb.x, 0, bb.z);
-      slotMark.rotation.y = bb.th;
-      slotMark.visible = SET.anzeige === "klassisch";
     }
     function standBeside(k) {
       const c = Math.cos(k.th), sn = Math.sin(k.th);
@@ -11320,21 +11460,18 @@ void main(){
       $2("results").classList.remove("on");
       G2.parked = false;
       $2("note").classList.remove("on");
-      guide.run++;
       foot.booked = false;
       voice.bare = true;
-      brief.result = brief.last = race.karts.map((k, i) => ({ pos: race.final ? race.final[i] : k.pos, name: k.driver.name, best: isFinite(k.best) ? fmtTime(k.best) : "–", color: k.driver.color, me: k === race.player })).sort((a, b) => a.pos - b.pos);
-      for (const k of race.karts) if (isFinite(k.best) && k.best > 0 && !(brief.day[k.driver.name] <= k.best)) brief.day[k.driver.name] = k.best;
       G2.blend = { t: 0, dur: 0.8, x: cam.x, y: cam.y, z: cam.z, lx: cam.lx, ly: cam.ly, lz: cam.lz };
-      G2.state = "foot";
+      me.in = "foot";
       G2.visit = true;
-      models[0].setDriver(false);
+      models[me.seat].setDriver(false);
       document.body.classList.remove("racing");
       document.body.classList.add("walking");
       hud.show(false);
       audio.outsideTarget = 1;
       audio.show = 0.75;
-      standBeside(race.karts[0]);
+      standBeside(race.player);
       footHint();
       cam.init = false;
       canvas.focus();
@@ -11344,7 +11481,7 @@ void main(){
       foot.busy = -1;
       fade(true);
       setTimeout(() => {
-        enterHall(race.karts[0]);
+        enterHall(race.player);
         fade(false);
       }, 340);
     }
@@ -11355,7 +11492,7 @@ void main(){
         if (foot.busy > 0.2 && !hallAsset) fade(true);
         if (foot.busy > 0.56) {
           foot.busy = 0;
-          if (hallAsset) startOutlap();
+          if (hallAsset) meSit();
           else {
             beginRace();
             G2.visit = true;
@@ -11436,15 +11573,13 @@ void main(){
         }
         for (const o of world.obstacles) round(o[0], o[1], o[2] + FOOT.r);
         if (crew.on) {
-          if (z > 46.4) crew.armed = true;
-          else if (crew.armed && foot.booked && !crew.called && z < 45.9 && x > -46 && x < 14) crewCall();
           for (const f of crew.list) if (f && f.root.visible) round(f.x, f.z, 0.3 + FOOT.r);
         }
         for (let i = 0; i < race.karts.length; i++) {
           const k = race.karts[i], c = Math.cos(k.th), sn = Math.sin(k.th);
           round(k.x + c * 0.5, k.z - sn * 0.5, 0.55 + FOOT.r);
           round(k.x - c * 0.45, k.z + sn * 0.45, 0.62 + FOOT.r);
-          if (i === 0) near = Math.hypot(x - k.x, z - k.z) < FOOT.reach;
+          if (i === me.seat) near = Math.hypot(x - k.x, z - k.z) < FOOT.reach;
         }
       }
       if (built) {
@@ -11490,7 +11625,7 @@ void main(){
       let x = foot.x - Math.cos(foot.yaw) * Math.sin(ph * 0.5) * 0.012 * go, y = foot.y + FOOT.eye + Math.sin(ph) * 0.022 * go, z = foot.z + Math.sin(foot.yaw) * Math.sin(ph * 0.5) * 0.012 * go;
       let ax = x + lx * 8, ay = y + ly * 8, az = z + lz * 8;
       if (foot.busy > 0) {
-        const k = race.karts[0], t = smoothstep(0, 0.5, foot.busy), c = Math.cos(k.th), sn = Math.sin(k.th);
+        const k = race.player, t = smoothstep(0, 0.5, foot.busy), c = Math.cos(k.th), sn = Math.sin(k.th);
         x = lerp(x, k.x - c * 0.25, t);
         y = lerp(y, 0.92, t);
         z = lerp(z, k.z + sn * 0.25, t);
@@ -11662,8 +11797,8 @@ void main(){
         } else if (e.type === "lastlap") {
           hud.message("Letzte Runde", "hot", 2.4);
           if (audio.section !== "drop" && audio.section !== "drop2") audio.goto("lastBuild");
-        } else if (e.type === "finish") {
-          G2.state = "finished";
+        } else if (e.type === "flag") voiceSay("ziel", "halle");
+        else if (e.type === "finish") {
           G2.finishT = 0;
           const p = race.player;
           hud.message(p.pos === 1 ? "Sieg" : "Platz " + p.pos, p.pos === 1 ? "good" : "", 3.2);
@@ -11941,7 +12076,7 @@ void main(){
       const racing = G2.state === "race" || G2.state === "finished" || G2.state === "outlap" || G2.state === "inlap";
       if (!G2.paused) {
         G2.time += dt;
-        if (G2.state === "grid") {
+        if (RUN.phase === "grid" && RUN.kind !== "demo") {
           G2.gridT += dt;
           const st = audio.start;
           if (st) {
@@ -11950,12 +12085,7 @@ void main(){
             const n = clamp(Math.floor(beats) - 1, 0, 5);
             if (now >= st.go) {
               race.go();
-              G2.state = "race";
-              world.setStartLights(0, true);
-              hud.lights(5, true);
-              hud.message("Los", "hot", 1.1);
-              audio.beep(1320, 0.5, 0.28);
-              setTimeout(() => hud.lights(0, false), 1500);
+              runSet("race");
             } else if (n !== G2.lightsShown) {
               G2.lightsShown = n;
               world.setStartLights(n, false);
@@ -11969,8 +12099,9 @@ void main(){
         const laps = G2.state === "outlap" || G2.state === "inlap";
         const own = !player || !player.finished || G2.state === "inlap" || G2.state === "finished" && G2.visit && !!hallAsset;
         if (player && own && G2.state !== "menu" && !afoot && !(race.autoPlayer && laps)) readInput(player);
-        if (!afoot || race.state === "pit" && race.pitMode === "in") race.step(dt);
+        if (!(RUN.phase === "open" && race.state !== "pit")) race.step(dt);
         handleEvents();
+        runStep(dt);
         crewUpdate(dt, G2.time);
         briefUpdate(dt);
         guideUpdate(dt);
@@ -11980,14 +12111,6 @@ void main(){
         infoUpdate(dt);
         flagUpdate(dt);
         if (G2.state === "outlap") {
-          if (race.pitHold && crewSeated()) {
-            race.pitHold = false;
-            if (!race.autoPlayer) player.hold = false;
-            setPit(true, true, false);
-            hud.message("Boxenausfahrt offen", "", 2.6);
-            note(document.body.classList.contains("welt") ? DEVICE.touch ? "Bremse halten: r\xFCckw\xE4rts" : "S oder \u2193: r\xFCckw\xE4rts" : G2.outHow);
-          }
-          if (race.pitOut && PIT.open) setPit(false, false, false);
           if (race.quali && player) {
             const q = player.q | 0;
             if (q !== G2.qSeen) {
@@ -12015,13 +12138,8 @@ void main(){
               hud.message("Deine Startbox ist markiert", "", 2.6);
             }
           }
-          if (race.formed) armGrid();
         } else if (slotMark.visible && G2.state !== "grid" && G2.state !== "inlap") slotMark.visible = false;
-        if (race.state === "pit" && race.pitMode === "in") {
-          if (!race.entryOpen && race.pitT > 2) {
-            setPit(true, false, true);
-            race.entryOpen = true;
-          } else if (race.parkedAll && PIT.open) setPit(false, false, false);
+        {
           if (G2.state === "inlap" && player.set && !G2.parked) {
             G2.parked = true;
             slotMark.visible = false;
@@ -12071,12 +12189,9 @@ void main(){
         }
         if (G2.state === "finished") {
           G2.finishT += dt;
-          if (G2.finishT > 3.4 && !$2("results").classList.contains("on")) {
-            fillResults(race.results(), race.laps);
-            $2("r-title").textContent = player.pos === 1 ? "Schichtsieger" : "Schichtprotokoll";
-            $2("r-sub").textContent = `Platz ${player.pos} von ${race.karts.length} nach ${race.laps} Runden. Deine schnellste Runde: ${isFinite(player.best) ? fmtTime(player.best) : "\u2013"}.`;
-            if (G2.visit && hallAsset) startInlap();
-            else {
+          if (G2.finishT > 3.4 && RUN.kind !== "visit" && !$2("results").classList.contains("on")) {
+            resultSheet();
+            {
               $2("r-again").textContent = G2.visit ? "Zur\xFCck in die Box" : "Nochmal fahren";
               $2("results").classList.add("on");
               hud.show(false);
@@ -12144,7 +12259,7 @@ void main(){
           const ck = attractCam(dt);
           if (ck) camKart = ck;
         } else if (player) {
-          const model = models[0];
+          const model = models[me.seat];
           const old = SET.fahr === "vorher";
           if (G2.camMode === 1) (old ? onboardCamOld : SET.sitz !== "alt" ? seatCam : onboardCam)(player, dt, model);
           else (old ? chaseCamOld : chaseCam)(player, dt, G2.camMode === 2);
@@ -12189,7 +12304,7 @@ void main(){
           zone.intensity = clamp(m * 2.2, 0.25, 2.2);
           zone.position.set(camKart.x, camKart.y + 3.2, camKart.z);
         }
-        models[0].setOnboard(G2.camMode === 1 && G2.state !== "menu" && !afoot, SET.fahr !== "vorher" && SET.sitz !== "alt" ? SEAT.body : 0);
+        models[me.seat].setOnboard(G2.camMode === 1 && G2.state !== "menu" && !afoot, SET.fahr !== "vorher" && SET.sitz !== "alt" ? SEAT.body : 0);
         const boostNow = !!(player && player.boosting && G2.state !== "menu");
         if (boostNow && !G2.wasBoost) audio.boostOn();
         G2.wasBoost = boostNow;
@@ -12204,7 +12319,7 @@ void main(){
       audio.update(dt, lk ? { x: cam.x, y: cam.y, z: cam.z, th: Math.atan2(-(cam.lz - cam.z), cam.lx - cam.x), px: world.STAGE.x, pz: world.STAGE.z, covered: G2.state !== "menu" && G2.state !== "foot" && !G2.ghost && track.COVER[lk.idx] !== Infinity } : null);
       if (player) {
         const others = [];
-        for (let i = 1; i < race.karts.length; i++) others.push(race.karts[i]);
+        for (let i = 0; i < race.karts.length; i++) if (!race.karts[i].human) others.push(race.karts[i]);
         audio.kartSound(player, { x: cam.x, y: cam.y, z: cam.z, th: player.th }, others, G2.paused ? null : G2.state === "grid" ? "grid" : racing ? "race" : null, dt);
       } else if (audio.engine) {
         audio.kartSound(race.karts[0], { x: cam.x, y: cam.y, z: cam.z, th: cam.th }, [], null, dt);
@@ -12245,7 +12360,7 @@ void main(){
     $2("m-walk").disabled = false;
     attract();
     requestAnimationFrame(frame);
-    window.__ns = { guide, voice, voiceSay, stele, STELE, TERMS, LINK, linkAt, proj, flag, info, dash, models, helmet, brief, deskOpen, deskClose, crew, crewCall, crewSeated, FIG, enterHall, leaveKart, footAct, foot, FOOT, SITE, PIT, setPit, startOutlap, startInlap, getOut, applyLook, LOOKS, G: G2, SET, race, audio, world, cam, camera, renderer, post, scene, track, models, beginRace, attract, setPaused, hud, fx, keys, AIDriver, HULL, HIT, KP, Kart, stepKart, steerLimit, FEELS, setFeel, nextFeel, rig, AHEAD, nextAhead, PHYS, setPhys, SEATS, setSeat, nextSeat, BACK, DEVICE, touch };
+    window.__ns = { guide, voice, voiceSay, stele, STELE, TERMS, LINK, linkAt, proj, flag, info, dash, models, helmet, brief, deskOpen, deskClose, crew, crewCall, crewSeated, FIG, enterHall, leaveKart, footAct, foot, FOOT, SITE, PIT, setPit, startOutlap: meSit, startInlap: () => runSet("in"), hall, me, runSet, runStep, seat, getOut, applyLook, LOOKS, G: G2, SET, race, audio, world, cam, camera, renderer, post, scene, track, models, beginRace, attract, setPaused, hud, fx, keys, AIDriver, HULL, HIT, KP, Kart, stepKart, steerLimit, FEELS, setFeel, nextFeel, rig, AHEAD, nextAhead, PHYS, setPhys, SEATS, setSeat, nextSeat, BACK, DEVICE, touch };
   }
   function buildEnv(renderer) {
     const THREE = window.THREE;
