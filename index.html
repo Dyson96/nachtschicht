@@ -5,7 +5,7 @@
 <!-- Nachtschicht Grand Prix. (c) 2026. Alle Rechte vorbehalten. Kopieren, Veraendern, Weiterverbreiten und Einbetten nur mit schriftlicher Erlaubnis; siehe LICENSE.txt. -->
 <meta name="robots" content="noindex, nofollow">
 <script>(function(){var ok=["dyson96.github.io"],h=location.hostname,loc=h===""||h==="localhost"||h==="127.0.0.1"||h==="[::1]"||/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(h)||/\.local$/.test(h),own=loc||!ok.length||ok.indexOf(h)>=0,fr=false;try{fr=window.top!==window.self}catch(e){fr=true}if(!own||(fr&&!loc)){window.__LOCK=1;document.write('<meta charset="utf-8"><body style="margin:0;background:#050409;color:#ccd;font:16px/1.5 sans-serif;display:grid;place-items:center;height:100vh;text-align:center"><p>Nachtschicht Grand Prix l\u00e4uft nur auf seiner eigenen Adresse.<br><a style="color:#ff4fa0" href="https://dyson96.github.io/nachtschicht/">Zum Spiel</a></p></body>');document.close();if(window.stop)window.stop();}})();</script>
-<script>window.__BUILD="15.11.2026 19:46";</script>
+<script>window.__BUILD="15.11.2026 20:09";</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -11165,7 +11165,25 @@ void main(){
       if (audio.ctx && audio.ctx.state !== "closed") {
         if (p && voice.on && voice.on.gain) voice.on.gain.gain.value = 0;
       }
-      if (p) $2("p-diag").textContent = audio.report() + " \u00B7 Bild: " + renderer.domElement.width + " x " + renderer.domElement.height + (DEVICE.lite ? ", Handy-Fassung" : "");
+      if (p) {
+        const Q = G2.stat, st = Q && (Q.last || (Q.n > 30 ? [Q.n / Q.sum, 1 / Q.max] : null));
+        let quick = 0;
+        if (st && Q.ring) {
+          const a = Array.from(Q.ring).filter((v) => v > 0).sort((x, y) => x - y);
+          if (a.length > 40) quick = 1 / a[Math.floor(a.length * 0.05)];
+        }
+        let chip = "unbekannt";
+        try {
+          const gl = renderer.getContext(), ex = gl.getExtension("WEBGL_debug_renderer_info");
+          chip = String(ex ? gl.getParameter(ex.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)).replace(/^ANGLE \(/, "").replace(/\)$/, "").slice(0, 80);
+        } catch (e) {
+        }
+        const ac = audio.ctx;
+        $2("p-diag").textContent = audio.report() + " \u00B7 Bild: " + renderer.domElement.width + " x " + renderer.domElement.height + (SET.gfx === "auto" && G2.scale < 1 ? ", gerechnet mit " + Math.round(G2.scale * 100) + " %" : "") + (document.fullscreenElement ? ", Vollbild" : "") + (DEVICE.lite ? ", Handy-Fassung" : "")
+          + (st ? " \u00B7 " + Math.round(st[0]) + " Bilder/s (langsamstes: " + Math.round(st[1]) + "/s" + (quick ? ", schnelle: " + Math.round(quick) + "/s" : "") + ")" : "")
+          + " \u00B7 Grafikchip: " + chip
+          + (ac ? " \u00B7 Ton: " + ac.sampleRate + " Hz, Verzug " + Math.round(((ac.baseLatency || 0) + (ac.outputLatency || 0)) * 1e3) + " ms, " + (ac.state === "running" ? "l\xE4uft" : ac.state) : " \u00B7 Ton: aus");
+      }
       $2("pause").classList.toggle("on", p);
       if (p) $2("p-resume").textContent = G2.state === "foot" ? "Weitergehen" : "Weiterfahren";
       if (p && document.pointerLockElement === canvas && document.exitPointerLock) document.exitPointerLock();
@@ -13596,6 +13614,18 @@ void main(){
       post.mOut.uniforms.uTime.value = G2.time;
       post.mOut.uniforms.uDim.value = damp(post.mOut.uniforms.uDim.value, G2.ghost ? 0 : G2.paused || $2("results").classList.contains("on") ? 1 : G2.state === "menu" ? 0.35 : 0, 6, dt);
       post.render(scene, camera);
+      if (rawDt < 0.25 && !G2.paused) {
+        const q = G2.stat || (G2.stat = { n: 0, sum: 0, max: 0, t: 0, last: null, ring: new Float32Array(240), ri: 0 });
+        q.n++;
+        q.sum += rawDt;
+        q.t += rawDt;
+        q.ring[q.ri = (q.ri + 1) % 240] = rawDt;
+        if (rawDt > q.max) q.max = rawDt;
+        if (q.t >= 10) {
+          q.last = [q.n / q.sum, 1 / q.max];
+          q.n = q.sum = q.max = q.t = 0;
+        }
+      }
       if (SET.gfx === "auto" && rawDt < 0.25) {
         G2.frameAvg += (rawDt * 1e3 - G2.frameAvg) * 0.05;
         if (G2.frameAvg > 23) {
