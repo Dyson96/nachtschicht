@@ -5,7 +5,7 @@
 <!-- Nachtschicht Grand Prix. (c) 2026. Alle Rechte vorbehalten. Kopieren, Veraendern, Weiterverbreiten und Einbetten nur mit schriftlicher Erlaubnis; siehe LICENSE.txt. -->
 <meta name="robots" content="noindex, nofollow">
 <script>(function(){var ok=["dyson96.github.io"],h=location.hostname,loc=h===""||h==="localhost"||h==="127.0.0.1"||h==="[::1]"||/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(h)||/\.local$/.test(h),own=loc||!ok.length||ok.indexOf(h)>=0,fr=false;try{fr=window.top!==window.self}catch(e){fr=true}if(!own||(fr&&!loc)){window.__LOCK=1;document.write('<meta charset="utf-8"><body style="margin:0;background:#050409;color:#ccd;font:16px/1.5 sans-serif;display:grid;place-items:center;height:100vh;text-align:center"><p>Nachtschicht Grand Prix l\u00e4uft nur auf seiner eigenen Adresse.<br><a style="color:#ff4fa0" href="https://dyson96.github.io/nachtschicht/">Zum Spiel</a></p></body>');document.close();if(window.stop)window.stop();}})();</script>
-<script>window.__BUILD="15.11.2026 13:34";</script>
+<script>window.__BUILD="15.11.2026 15:22";</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -11541,8 +11541,13 @@ void main(){
     const net = {
       url: /^ws:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(NQ.get("relay") || "") ? NQ.get("relay") : RELAY,
       code: cleanName(NQ.get("halle") || "").toUpperCase().replace(/[^A-Z0-9]/g, ""),
-      ws: null, on: false, id: 0, hostId: 0, off: 0, rtt: 1e9, pingT: 0, cT: 0, hT: 0, got: 0, people: {}, sigF: "", sigS: "", lost: ""
+      ws: null, on: false, id: 0, hostId: 0, off: 0, rtt: 1e9, pingT: 0, cT: 0, hT: 0, got: 0, people: {}, sigF: "", sigS: "", lost: "",
+      beat: 0, pub: false, pubN: 1,
+      cnt: 0,
+      again: 0, re: false
     };
+    net.pub = !net.code;
+    const netBusy = () => net.on && net.cnt > 0;
     hall.now = () => performance.now() / 1e3 + net.off;
     const N3 = (v) => typeof v === "number" && isFinite(v) ? Math.round(v * 1e3) / 1e3 : 0;
     const num = (v) => typeof v === "number" && isFinite(v) ? v : 0;
@@ -11553,7 +11558,11 @@ void main(){
     const kartTake = (k, a) => {
       if (!k || k.own || !Array.isArray(a) || a.length < 21) return;
       for (let j = 0; j < 21; j++) if (typeof a[j] !== "number" || !isFinite(a[j])) return;
-      if (!k.net || a[0] > k.net[0] || a[0] < k.net[0] - 2) k.net = a;
+      if (!k.net || a[0] > k.net[0] || a[0] < k.net[0] - 2) {
+        k.net = a;
+        const age = hall.now() - a[0];
+        if (age > 0 && age < 1) k.lag = k.lag > 0 ? k.lag + (age - k.lag) * 0.1 : age;
+      }
     };
     function netKarts(dt) {
       const now = hall.now();
@@ -11601,7 +11610,8 @@ void main(){
     function netKick(d) {
       const k = race.karts[d.s | 0], a = d.a, by = d.by | 0;
       if (!k || !k.own || !Array.isArray(a) || a.length < 4) return;
-      if (k.met === by && race.fr - (k.metF | 0) < 10) return;
+      const o = race.karts[by];
+      if (k.met === by && race.fr - (k.metF | 0) < 10 + Math.round((o && o.lag > 0 ? Math.min(o.lag, 0.4) : 0) * 90)) return;
       const q = k.pendK || (k.pendK = [0, 0, 0, 0, by]);
       q[0] = clamp(q[0] + num(a[0]), -15, 15);
       q[1] = clamp(q[1] + num(a[1]), -15, 15);
@@ -11616,10 +11626,11 @@ void main(){
       }
     };
     function netOpen() {
-      if (net.ws || !net.url || !net.code || !hallAsset) return;
+      if (net.ws || !net.url || !hallAsset) return;
+      const code = net.pub ? "BAHN" + net.pubN : net.code;
       let ws;
       try {
-        ws = new WebSocket(net.url + (net.url.indexOf("?") < 0 ? "?" : "&") + "halle=" + encodeURIComponent(net.code));
+        ws = new WebSocket(net.url + (net.url.indexOf("?") < 0 ? "?" : "&") + "halle=" + encodeURIComponent(code));
       } catch (e) {
         return;
       }
@@ -11633,18 +11644,27 @@ void main(){
         }
         if (m && typeof m === "object") netGot(m);
       };
-      ws.onclose = () => netShut(ws);
+      ws.onclose = (ev) => netShut(ws, ev ? ev.code : 0);
     }
-    function netShut(ws) {
+    function netShut(ws, code) {
       if (ws && ws !== net.ws) return;
-      const was = net.on, guest = was && !hall.host;
+      const was = net.on, guest = was && !hall.host, company = was && net.cnt > 0;
       net.ws = null;
       net.on = false;
+      net.cnt = 0;
       for (const id in net.people) netGone(+id);
       if (guest) {
         net.lost = "Verbindung zur Halle verloren.";
         hall.host = race.host = true;
         attract();
+      } else if (!was && code === 4001) {
+        if (net.pub && net.pubN < 8) {
+          net.pubN++;
+          netOpen();
+        } else note("Diese Halle ist voll.");
+      } else if (me.in !== "menu") {
+        net.again = was ? 3 : 20;
+        if (company) note("Verbindung verloren.");
       }
     }
     function netLeave() {
@@ -11657,6 +11677,10 @@ void main(){
       net.off = 0;
       net.rtt = 1e9;
       net.sigF = net.sigS = "";
+      net.cnt = net.again = 0;
+      net.re = false;
+      net.pubN = 1;
+      net.hT = 0;
       if (ws) try {
         ws.onclose = null;
         ws.close();
@@ -11665,29 +11689,52 @@ void main(){
     }
     function netGot(m) {
       if (m.t === "hi") {
+        const host = (m.id | 0) === (m.host | 0);
+        if (net.re && !host) {
+          const ws = net.ws;
+          net.ws = null;
+          net.re = false;
+          net.again = 0;
+          try {
+            ws.onclose = null;
+            ws.close();
+          } catch (e) {
+          }
+          note("In der Halle sind jetzt andere. \xDCber das Men\xFC kommst du zu ihnen.");
+          return;
+        }
+        net.re = false;
         net.id = m.id | 0;
         net.hostId = m.host | 0;
         net.on = true;
+        net.cnt = Array.isArray(m.peers) ? Math.max(0, m.peers.length - 1) : 0;
+        net.cT = 0;
         net.got = performance.now();
-        const host = net.id === net.hostId;
+        net.hT = host ? 0 : net.got;
         hall.host = race.host = host;
         if (host) hall.seats[me.seat] = net.id;
         else {
           me.seat = -1;
           net.sigF = net.sigS = "";
         }
+      } else if (m.t === "join") {
+        net.cnt++;
+        net.cT = 0;
       } else if (m.t === "left") {
+        net.cnt = Math.max(0, net.cnt - 1);
         netGone(m.id | 0);
         if ((m.host | 0) !== net.hostId) {
           net.lost = "Der Gastgeber hat die Halle verlassen.";
           attract();
         }
+      } else if (m.f && Array.isArray(m.m)) {
+        for (let j = 0; j < m.m.length && j < 4; j++) if (m.m[j] && typeof m.m[j] === "object" && !Array.isArray(m.m[j])) netGot({ f: m.f, m: m.m[j] });
       } else if (m.f && m.m && typeof m.m === "object") {
         const f = m.f | 0, d = m.m;
         if (d.t === "c") netPerson(f, d);
         else if (d.t === "k") netKick(d);
         else if (d.t === "h" && f === net.hostId && !hall.host) netHall(d);
-        else if (d.t === "ping" && hall.host) netSay({ t: "pong", to: f, c: d.c, h: hall.now() });
+        else if (d.t === "ping" && hall.host && performance.now() - net.beat < 1500) netSay({ t: "pong", to: f, c: d.c, h: hall.now() });
         else if (d.t === "pong" && d.to === net.id && f === net.hostId) {
           const now = performance.now() / 1e3, rtt = now - num(d.c);
           if (rtt >= 0 && rtt < net.rtt + 0.02) {
@@ -12018,24 +12065,34 @@ void main(){
       return f;
     }
     function netStep(dt, time) {
+      if (!net.ws && net.again > 0 && me.in !== "menu" && (net.again -= dt) <= 0) {
+        net.re = true;
+        netOpen();
+        if (!net.ws) net.again = 20;
+      }
       if (!net.on) return;
       const now = performance.now();
+      net.beat = now;
       if (race.kicks.length) {
         for (const q of race.kicks) {
           netSay({ t: "k", s: q[0], a: [N3(q[1]), N3(q[2]), N3(q[3]), N3(q[4])], by: q[5] });
-          if (race.karts[q[0]]) race.karts[q[0]].keepT = hall.now() + (net.rtt < 1 ? Math.min(0.3, net.rtt * 1.5 + 0.08) : 0.14);
+          const far = race.karts[q[0]], t = hall.now();
+          if (far && !(t < far.keepNo)) {
+            const lag = far.lag > 0 ? far.lag : 0.1;
+            far.keepT = t + clamp(lag * 1.3 + 0.04, 0.08, 0.35);
+            far.keepNo = far.keepT + Math.min(lag, 0.4) + 0.3;
+          }
         }
         race.kicks.length = 0;
       }
       if (hall.host) seatsDecide();
       net.cT -= dt;
       if (net.cT <= 0) {
-        net.cT = 0.05;
+        net.cT = net.cnt > 0 ? 0.05 : 2;
         const k = me.seat >= 0 ? race.karts[me.seat] : null, sp = Math.hypot(foot.vx, foot.vz);
         const c = { t: "c", n: myName(), b: foot.booked ? me.book | 0 : 0, l: foot.helm ? 1 : foot.back ? 2 : 0, k: me.in === "kart" ? 1 : 0, r: me.run, f: [N3(foot.x), N3(foot.z), N3(foot.y), N3(foot.yaw), N3(sp)] };
         if (k && k.own && k.human && (hall.host || net.rtt < 9)) c.K = kartPack(k);
-        netSay(c);
-        if (hall.host) netSay(hallPack());
+        netSay(hall.host ? [c, hallPack()] : c);
       }
       if (!hall.host) {
         net.pingT -= dt;
@@ -12043,7 +12100,7 @@ void main(){
           net.pingT = net.rtt > 1 ? 0.4 : 3;
           netSay({ t: "ping", c: performance.now() / 1e3 });
         }
-        if (net.hT && now - net.hT > 6000) {
+        if (net.hT && now - net.hT > 15000) {
           net.lost = "Die Halle antwortet nicht mehr.";
           netLeave();
           attract();
@@ -12905,12 +12962,13 @@ void main(){
       const dt = clamp(rawDt, 1e-3, 0.05);
       const player = race.player;
       const racing = G2.state === "race" || G2.state === "finished" || G2.state === "outlap" || G2.state === "inlap";
-      if (!G2.paused || net.on) {
+      if (G2.paused && net.on && !netBusy()) netStep(dt, G2.time);
+      if (!G2.paused || netBusy()) {
         G2.time += dt;
         if (RUN.phase === "grid" && RUN.kind !== "demo") {
           G2.gridT += dt;
           const sa = audio.start;
-          if (hall.host && sa && (!RUN.lights || !net.on)) {
+          if (hall.host && sa && (!RUN.lights || !netBusy())) {
             const d = hall.now() - audio.now();
             RUN.lights = [sa.t0 + d, sa.go + d];
           }
