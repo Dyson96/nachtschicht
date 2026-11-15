@@ -5,7 +5,7 @@
 <!-- Nachtschicht Grand Prix. (c) 2026. Alle Rechte vorbehalten. Kopieren, Veraendern, Weiterverbreiten und Einbetten nur mit schriftlicher Erlaubnis; siehe LICENSE.txt. -->
 <meta name="robots" content="noindex, nofollow">
 <script>(function(){var ok=["dyson96.github.io"],h=location.hostname,loc=h===""||h==="localhost"||h==="127.0.0.1"||h==="[::1]"||/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(h)||/\.local$/.test(h),own=loc||!ok.length||ok.indexOf(h)>=0,fr=false;try{fr=window.top!==window.self}catch(e){fr=true}if(!own||(fr&&!loc)){window.__LOCK=1;document.write('<meta charset="utf-8"><body style="margin:0;background:#050409;color:#ccd;font:16px/1.5 sans-serif;display:grid;place-items:center;height:100vh;text-align:center"><p>Nachtschicht Grand Prix l\u00e4uft nur auf seiner eigenen Adresse.<br><a style="color:#ff4fa0" href="https://dyson96.github.io/nachtschicht/">Zum Spiel</a></p></body>');document.close();if(window.stop)window.stop();}})();</script>
-<script>window.__BUILD="15.11.2026 15:45";</script>
+<script>window.__BUILD="15.11.2026 16:49";</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -101,7 +101,6 @@ body.touch #w-act.on { display: block; }
 body.touch #w-pause { display: block; position: absolute; left: var(--edge-l); top: max(14px, env(safe-area-inset-top)); width: 46px; height: 32px; border-radius: 8px; pointer-events: auto;
   background: rgba(10, 9, 18, 0.5); border: 1px solid rgba(241, 238, 252, 0.3); color: var(--paper); font-weight: 700; }
 body.touch #w-hint { bottom: auto; top: clamp(14px, 6vh, 40px); }
-body.walking #p-restart { display: none; }
 #gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; outline: none;
   background: radial-gradient(120% 90% at 30% 100%, #1b0a2e 0%, var(--pitch) 60%); }
 
@@ -177,6 +176,7 @@ input[type="text"]:focus { border-color: var(--lime); }
 body.guest #book .p-set .row:not(:first-child) { display: none; }
 .hint { margin: 10px 0 0; font-size: 13px; color: var(--dim); }
 .two { display: flex; gap: 8px; }
+.plan > .two:first-child .mute { margin-top: 0; }
 .mute { margin-top: 12px; width: 100%; min-height: 36px; background: transparent; border: 1px solid rgba(241, 238, 252, 0.25); border-radius: 3px; font-size: 14px; }
 .mute[aria-pressed="true"] { border-color: var(--sodium); color: var(--sodium); }
 
@@ -361,8 +361,7 @@ body.touch .keys { display: none; }
     <h1 class="logo" aria-label="Nachtschicht"><span>NACHT</span><span>SCHICHT</span></h1>
     <p class="lede">E-Kart Grand Prix in Halle 808. Drei Ebenen, eine Helix, 670 Meter pro Runde, und die Anlage läuft die ganze Nacht.</p>
     <div class="go-row">
-      <button id="m-start" class="cta" type="button" disabled>Lädt …</button>
-      <button id="m-walk" class="cta alt" type="button" disabled>Halle betreten</button>
+      <button id="m-walk" class="cta" type="button" disabled>Lädt …</button>
       <span class="best">Deine Bestzeit: <b id="m-best">noch keine</b></span>
     </div>
     <div id="m-status" role="status">Strecke wird geladen …</div>
@@ -375,28 +374,14 @@ body.touch .keys { display: none; }
       <li><kbd>Leertaste</kbd> Boost</li>
       <li><kbd>C</kbd> Kamera: hinter dem Kart, im Sitz, weit</li>
       <li><kbd>K</kbd> Kamera-Blick in die Kurve: fest / dezent / voraus</li>
-      <li><kbd>V</kbd> Steuerung und Kamera: neu / wie vorher</li>
-      <li><kbd>I</kbd> Sitz-Ansicht: lebendig / ruhig / alt</li>
       <li><kbd>R</kbd> zurück auf die Strecke</li>
       <li><kbd>Esc</kbd> Pause</li>
       <li><kbd>M</kbd> Ton</li>
       <li><kbd>J</kbd> nächster Musiktitel</li>
       <li><kbd>B</kbd> freie Kamera: durch die Halle fliegen</li>
-<li><kbd>L</kbd> Licht: neu / original</li>
     </ul>
   </div>
-  <section class="plan" aria-labelledby="plan-h">
-    <h2 id="plan-h">Schichtplan</h2>
-    <div class="row"><span>Runden</span><div class="seg" id="m-laps"><button type="button" data-v="3">3</button><button type="button" data-v="5">5</button><button type="button" data-v="8">8</button></div></div>
-    <div class="row"><span>Gegner</span><div class="seg" id="m-opp"><button type="button" data-v="3">3</button><button type="button" data-v="5">5</button><button type="button" data-v="7">7</button></div></div>
-    <div class="row"><span>Niveau</span><div class="seg" id="m-level"><button type="button" data-v="0">Azubi</button><button type="button" data-v="1">Geselle</button><button type="button" data-v="2">Meister</button></div></div>
-    <div class="row"><label for="m-music">Musik</label><input id="m-music" type="range" min="0" max="100" step="5" value="80"></div>
-    <div class="row"><label for="m-sfx">Effekte</label><input id="m-sfx" type="range" min="0" max="100" step="5" value="80"></div>
-    <div class="row"><span>Grafik</span><div class="seg" id="m-gfx"><button type="button" data-v="auto">Auto</button><button type="button" data-v="niedrig">Niedrig</button><button type="button" data-v="hoch">Hoch</button></div></div>
-    <div class="row touch-only"><span>Lenkung</span><div class="seg" id="m-touch"><button type="button" data-v="schieber">Schieber</button><button type="button" data-v="tasten">Tasten</button></div></div>
-    <div class="row"><span>Blick voraus</span><div class="seg" id="m-ahead"><button type="button" data-v="fest">Fest</button><button type="button" data-v="dezent">Dezent</button><button type="button" data-v="voraus">Voraus</button></div></div>
-    <div class="row"><span>Sitz-Ansicht</span><div class="seg" id="m-seat"><button type="button" data-v="lebendig">Lebendig</button><button type="button" data-v="ruhig">Ruhig</button><button type="button" data-v="alt">Alt</button></div></div>
-    <div class="row"><span>Anzeige</span><div class="seg" id="m-hud"><button type="button" data-v="welt">Welt</button><button type="button" data-v="klassisch">Klassisch</button></div></div>
+  <section class="plan" aria-label="Ton und Hinweise">
     <div class="two"><button id="m-mute" class="mute" type="button" aria-pressed="false">Ton ist an</button><button id="m-full" class="mute" type="button" hidden>Vollbild</button></div>
     <p class="hint">Die Karts bremsen nur hinten: Wer in der Kurve zu hart bremst, blockiert die Hinterachse wie im echten Leihkart. Bremsen lädt den Boost, im Windschatten rollt das Kart leichter. Ein Gamepad funktioniert auch.</p>
     <p class="diag" id="m-build"></p>
@@ -426,7 +411,6 @@ body.touch .keys { display: none; }
     <p>Das Rennen steht, die Musik wartet.</p>
     <div class="acts">
       <button id="p-resume" class="btn main" type="button">Weiterfahren</button>
-      <button id="p-restart" class="btn" type="button">Rennen neu starten</button>
       <button id="p-menu" class="btn" type="button">Zum Menü</button>
     </div>
     <div class="p-set">
@@ -435,7 +419,6 @@ body.touch .keys { display: none; }
       <div class="row"><span>Grafik</span><div class="seg" id="p-gfx"><button type="button" data-v="auto">Auto</button><button type="button" data-v="niedrig">Niedrig</button><button type="button" data-v="hoch">Hoch</button></div></div>
       <div class="row touch-only"><span>Lenkung</span><div class="seg" id="p-touch"><button type="button" data-v="schieber">Schieber</button><button type="button" data-v="tasten">Tasten</button></div></div>
       <div class="row"><span>Blick voraus</span><div class="seg" id="p-ahead"><button type="button" data-v="fest">Fest</button><button type="button" data-v="dezent">Dezent</button><button type="button" data-v="voraus">Voraus</button></div></div>
-      <div class="row"><span>Sitz-Ansicht</span><div class="seg" id="p-seat"><button type="button" data-v="lebendig">Lebendig</button><button type="button" data-v="ruhig">Ruhig</button><button type="button" data-v="alt">Alt</button></div></div>
       <div class="row"><span>Anzeige</span><div class="seg" id="p-hud"><button type="button" data-v="welt">Welt</button><button type="button" data-v="klassisch">Klassisch</button></div></div>
     </div>
     <p id="p-diag" class="diag"></p>
@@ -468,7 +451,6 @@ body.touch .keys { display: none; }
     <li><kbd>Alt</kbd> langsam</li>
     <li><kbd>Mausrad</kbd> Tempo</li>
     <li><kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> umsehen ohne Maus</li>
-    <li><kbd>L</kbd> Licht</li>
     <li><kbd>J</kbd> nächster Titel</li>
     <li><kbd>H</kbd> Tasten ausblenden</li>
     <li><kbd>B</kbd> zurück</li>
@@ -1097,8 +1079,7 @@ body.touch .keys { display: none; }
   };
   KP.wb = KP.a + KP.b;
   var FEELS = {
-    neu: { grip: 1.25, slip: 0.12, tIn: [0.15, 0.42], ease: 0.45, tBack: [0.18, 0.23], hold: 0.08, tCross: 0.09 },
-    vorher: { grip: 1.55, slip: 0.17, tIn: [0.17, 0.3], ease: 1, tBack: [0.11, 0.11], hold: 0, tCross: 0.11 }
+    neu: { grip: 1.25, slip: 0.12, tIn: [0.15, 0.42], ease: 0.45, tBack: [0.18, 0.23], hold: 0.08, tCross: 0.09 }
   };
   var AHEAD = {
     fest: { side: 0, chase: { road: 0, d0: 0, d1: 0, yaw: 0, max: 0 }, seat: { road: 0, d0: 0, d1: 0, yaw: 0, max: 0 } },
@@ -1130,26 +1111,9 @@ body.touch .keys { display: none; }
       head: 0.4,
       jar: 0.4, kick: 0.25,
       body: 0.42
-    },
-    ruhig: {
-      w: [5, 5, 5], z: 1,
-      fwd: 25e-4, fwdMax: [0.012, 0.025],
-      side: 15e-4, sideMax: 0.02,
-      up: 0,
-      nod: 15e-4, nodMax: [8e-3, 0.012],
-      lean: 0, leanMax: 0,
-      level: 0.3,
-      turn: 3,
-      kerb: [28e-4, 35e-4, 25e-4],
-      road: 5e-4, hum: 0,
-      scrub: [0, 0, 0],
-      wheel: [0, 0, 0],
-      head: 0.65,
-      jar: 0.3, kick: 0.3,
-      body: 0.15
     }
   };
-  var SEAT_ORDER = ["lebendig", "ruhig", "alt"];
+
   var SEAT = SEATS.lebendig;
   function setSeat(name) {
     SEAT = SEATS[name] || SEATS.lebendig;
@@ -3334,11 +3298,6 @@ vec3 projLight(vec3 p){
 }`);
   }
   var LOOKS = {
-    neu: {
-      flood: 0.3, local: 1.4,
-      top: [1, 2.5], fix: [1, 2.5], strip: [1, 1.3], refl: 1.25, shadows: 0.8,
-      bloom: 0.3, exposure: 1.28, wb: [1, 1, 1], con: 1.08, vig: 0.34, ca: 4e-4
-    },
     original: {
       flood: 1, local: 1,
       top: [1, 1], fix: [1, 1], strip: [1, 1], refl: 1, shadows: 0,
@@ -8926,7 +8885,7 @@ void main(){
   // src/main.js
   var $2 = (id) => document.getElementById(id);
   var STORE = "nachtschicht.v1";
-  var SET = { laps: 3, opp: 5, level: 0, music: 0.8, sfx: 0.8, gfx: "auto", best: null, cam: 0, licht: "neu", fahr: "neu", blick: "dezent", touch: "schieber", sitz: "lebendig", quali: "mit", anzeige: "welt", name: "", rec: 0, recName: "" };
+  var SET = { laps: 3, opp: 5, level: 0, music: 0.8, sfx: 0.8, gfx: "auto", best: null, cam: 0, licht: "original", fahr: "neu", blick: "dezent", touch: "schieber", sitz: "lebendig", quali: "mit", anzeige: "welt", name: "", rec: 0, recName: "" };
   var cleanName = (v) => String(v || "").replace(/[^\p{L}\p{N} ._\-]/gu, "").replace(/\s+/g, " ").trim().slice(0, 12);
   function loadSettings(hot) {
     let s = {};
@@ -8948,10 +8907,10 @@ void main(){
     SET.level = clamp(SET.level | 0, 0, 2);
     if (SET.quali !== "ohne") SET.quali = "mit";
     if (SET.anzeige !== "klassisch") SET.anzeige = "welt";
-    if (!LOOKS[SET.licht]) SET.licht = "neu";
-    if (!FEELS[SET.fahr]) SET.fahr = "neu";
+    SET.licht = "original";
+    SET.fahr = "neu";
     if (!AHEAD[SET.blick]) SET.blick = "dezent";
-    if (!SEAT_ORDER.includes(SET.sitz)) SET.sitz = "lebendig";
+    SET.sitz = "lebendig";
     setSeat(SET.sitz);
     if (SET.touch !== "tasten") SET.touch = "schieber";
     setFeel(SET.fahr);
@@ -8994,7 +8953,7 @@ void main(){
     }
     if (!renderer) {
       status(THREE ? "WebGL l\xE4sst sich in diesem Browser nicht starten. Aktiviere die Hardwarebeschleunigung oder probiere einen anderen Browser." : "Die 3D-Bibliothek konnte nicht geladen werden. Pr\xFCfe deine Verbindung und lade die Seite neu.");
-      $2("m-start").disabled = true;
+      $2("m-walk").disabled = true;
       return;
     }
     renderer.setClearColor(new THREE.Color(FOG.color[0], FOG.color[1], FOG.color[2]), 1);
@@ -9002,7 +8961,7 @@ void main(){
       e.preventDefault();
       $2("menu").classList.remove("off");
       status("Die Grafik wurde vom Browser unterbrochen. Lade die Seite neu, um weiterzufahren.");
-      $2("m-start").disabled = true;
+      $2("m-walk").disabled = true;
     });
     status("Strecke wird vermessen \u2026");
     await nextFrame();
@@ -9042,7 +9001,7 @@ void main(){
     const post = new PostFX(renderer);
     post.link(world.U);
     function applyLook(name) {
-      const L = LOOKS[name] || LOOKS.neu;
+      const L = LOOKS.original;
       const U = world.U;
       setLightBalance(L.local, L.flood);
       U.uNeonTop.value.fromArray(L.top);
@@ -10691,7 +10650,6 @@ void main(){
         if (e.code === "KeyB" || e.code === "Escape") setGhost(false);
         else if (e.code === "KeyH") $2("ghost").classList.toggle("min");
         else if (e.code === "KeyM") toggleMute();
-        else if (e.code === "KeyL") nextLook();
         else if (e.code === "KeyJ") nextTrack();
         return;
       }
@@ -10707,13 +10665,10 @@ void main(){
       } else if (G2.state === "inlap" && G2.parked && !$2("results").classList.contains("on") && (e.code === "KeyE" || e.code === "Enter")) getOut();
       else if (G2.state === "foot" && (e.code === "KeyE" || e.code === "Enter" || e.code === "Space")) footAct();
       else if (e.code === "KeyR") rescue();
-      else if (e.code === "KeyL") nextLook();
       else if (e.code === "KeyJ") nextTrack();
-      else if (e.code === "KeyV") nextFeel();
       else if (e.code === "KeyK") nextAhead();
-      else if (e.code === "KeyI") nextSeat();
       else if (e.code === "KeyH") nextHud();
-      else if (e.code === "Enter" && G2.state === "menu" && !$2("m-start").disabled) beginRace();
+      else if (e.code === "Enter" && G2.state === "menu" && !$2("m-walk").disabled) enterGame();
     });
     const upright = DEVICE.touch && window.matchMedia ? window.matchMedia("(orientation: portrait)") : null;
     function heldUpright() {
@@ -10947,6 +10902,13 @@ void main(){
       } catch (e) {
       }
     }
+    function enterGame() {
+      if (hallAsset) enterHall(null);
+      else {
+        G2.visit = false;
+        beginRace();
+      }
+    }
     function beginRace() {
       immerse();
       setTimeout(heldUpright, 900);
@@ -11024,12 +10986,6 @@ void main(){
       clearTimeout(noteTimer);
       noteTimer = setTimeout(() => el.classList.remove("on"), 1800);
     }
-    function nextLook() {
-      SET.licht = SET.licht === "neu" ? "original" : "neu";
-      applyLook(SET.licht);
-      saveSettings();
-      note("Licht: " + SET.licht);
-    }
     function nextTrack() {
       audio.init();
       if (audio.deck) audio.deck.skip();
@@ -11037,21 +10993,6 @@ void main(){
     }
     audio.speakers = [{ x: world.STAGE.x - 9, y: 5, z: world.STAGE.z + 2, ch: 0 }, { x: world.STAGE.x + 9, y: 5, z: world.STAGE.z + 2, ch: 1 }].concat([[-41, 30], [40, 34], [43, -30], [-18, 6]].map((q) => ({ x: q[0], y: 17.3, z: q[1], ch: 2 })));
     audio.onTrack = (t) => note("\u266A " + t.title + " \u2013 " + t.artist);
-    function nextFeel() {
-      SET.fahr = SET.fahr === "neu" ? "vorher" : "neu";
-      setFeel(SET.fahr);
-      cam.init = false;
-      saveSettings();
-      note("Steuerung und Kamera: " + (SET.fahr === "neu" ? "neu" : "wie vorher"));
-    }
-    function nextSeat() {
-      SET.sitz = SEAT_ORDER[(SEAT_ORDER.indexOf(SET.sitz) + 1) % SEAT_ORDER.length];
-      setSeat(SET.sitz);
-      cam.init = false;
-      saveSettings();
-      ui.sync();
-      note("Sitz-Ansicht: " + { lebendig: "lebendig (der Kopf geht mit den Kr\xE4ften mit)", ruhig: "ruhig (Kart steht still im Bild)", alt: "alt" }[SET.sitz] + (SET.fahr === "vorher" ? " (wirkt nur mit der neuen Kamera, Taste V)" : ""));
-    }
     function applyHud() {
       document.body.classList.toggle("welt", SET.anzeige !== "klassisch" && !!hallAsset);
     }
@@ -11066,7 +11007,7 @@ void main(){
       SET.blick = AHEAD_ORDER[(AHEAD_ORDER.indexOf(SET.blick) + 1) % AHEAD_ORDER.length];
       saveSettings();
       ui.sync();
-      note("Blick voraus: " + SET.blick + (SET.fahr === "vorher" ? " (wirkt nur mit der neuen Kamera, Taste V)" : ""));
+      note("Blick voraus: " + SET.blick);
     }
     const ghost = { x: 0, y: 2, z: 0, yaw: 0, pitch: 0, vx: 0, vy: 0, vz: 0, speed: 6, drag: false, held: false };
     const GHOST_FOV = 62, GHOST_LOOK = 23e-4;
@@ -12634,16 +12575,8 @@ void main(){
     function refreshBest() {
       $2("m-best").textContent = SET.best ? fmtTime(SET.best) : "noch keine";
     }
-    $2("m-start").addEventListener("click", () => {
-      G2.visit = false;
-      beginRace();
-    });
-    $2("m-walk").addEventListener("click", () => enterHall(null));
+    $2("m-walk").addEventListener("click", enterGame);
     $2("p-resume").addEventListener("click", () => setPaused(false));
-    $2("p-restart").addEventListener("click", () => {
-      audio.suspend(false);
-      beginRace();
-    });
     $2("p-menu").addEventListener("click", () => {
       audio.suspend(false);
       attract();
@@ -12708,56 +12641,7 @@ void main(){
       const j = f >= 0 ? (i + 1) % N : (i - 1 + N) % N;
       return lerp(track.Y[i], track.Y[j], Math.abs(f)) - clamp(p.d, -6, 6) * Math.tan(track.BK[i]);
     }
-    function chaseCamOld(k, dt, far) {
-      const sp = Math.hypot(k.u, k.v);
-      const c = Math.cos(k.th), s = Math.sin(k.th);
-      const vx = k.u * c - k.v * s, vz = -k.u * s - k.v * c;
-      let want = k.th;
-      if (sp > 3) want = k.th + wrapAngle(Math.atan2(-vz, vx) - k.th) * 0.55;
-      if (!cam.init) cam.th = want;
-      cam.th += wrapAngle(want - cam.th) * (1 - Math.exp(-(far ? 5 : 7.5) * dt));
-      const back = (far ? 6.4 : 3.75) + sp * 0.03;
-      const up = far ? 2.6 : 1.4;
-      const fxx = Math.cos(cam.th), fzz = -Math.sin(cam.th);
-      const px = k.x - fxx * back, pz = k.z - fzz * back;
-      const py = surfaceY(px, pz, k.idx) + up;
-      const ax = k.x + fxx * 5.5, az = k.z + fzz * 5.5;
-      const ay = surfaceY(ax, az, k.idx) + (far ? 0.4 : 0.55);
-      if (!cam.init) {
-        cam.x = px;
-        cam.y = py;
-        cam.z = pz;
-        cam.lx = ax;
-        cam.ly = ay;
-        cam.lz = az;
-        cam.init = true;
-      }
-      cam.x = px;
-      cam.z = pz;
-      cam.y = damp(cam.y, py, 12, dt);
-      cam.lx = ax;
-      cam.lz = az;
-      cam.ly = damp(cam.ly, ay, 12, dt);
-      cam.fov = damp(cam.fov, 64 + 13 * Math.pow(clamp(sp / 22, 0, 1.2), 1.6) + (k.boosting ? 7 : 0), 5, dt);
-      cam.roll = damp(cam.roll, clamp(-k.ay * 32e-4, -0.06, 0.06), 6, dt);
-    }
     const _v2 = new THREE.Vector3();
-    function onboardCamOld(k, dt, model) {
-      model.frame.updateMatrixWorld(true);
-      _v2.set(-0.36, 0.93, 0).applyMatrix4(model.frame.matrixWorld);
-      cam.x = _v2.x;
-      cam.y = _v2.y;
-      cam.z = _v2.z;
-      const look = k.steer * 0.55 + clamp(k.r * 0.12, -0.25, 0.25);
-      _v2.set(Math.cos(look) * 8, 0.55, -Math.sin(look) * 8).applyMatrix4(model.frame.matrixWorld);
-      cam.lx = damp(cam.init ? cam.lx : _v2.x, _v2.x, 14, dt);
-      cam.ly = damp(cam.init ? cam.ly : _v2.y, _v2.y, 14, dt);
-      cam.lz = damp(cam.init ? cam.lz : _v2.z, _v2.z, 14, dt);
-      cam.init = true;
-      const sp = Math.abs(k.u);
-      cam.fov = damp(cam.fov, 76 + 12 * Math.pow(clamp(sp / 22, 0, 1.2), 1.6) + (k.boosting ? 6 : 0), 5, dt);
-      cam.roll = damp(cam.roll, clamp(k.roll * 0.7 - k.ay * 4e-3, -0.12, 0.12), 8, dt);
-    }
     const rig = { look: 0, lookV: 0, back: 0, backV: 0, side: 0, sideV: 0, yaw: 0, hx: 0, hxV: 0, hz: 0, hzV: 0, nod: 0, nodV: 0, hy: 0, hyV: 0, tilt: 0, tiltV: 0, rev: 0 };
     const BACK = { rate: 0.6, knee: 0.85, pull: 6 };
     function backing(k, dt) {
@@ -12832,33 +12716,6 @@ void main(){
       cam.ly = damp(cam.ly, ay, 12, dt);
       cam.fov = damp(cam.fov, wantFov, 5, dt);
       cam.roll = damp(cam.roll, wantRoll, 6, dt);
-    }
-    function onboardCam(k, dt, model) {
-      const sp = Math.abs(k.u), f = clamp(sp / 22, 0, 1.2);
-      const L = AHEAD[SET.blick].seat;
-      const wantLook = clamp((L.road ? roadTurn(k, L.d0 + L.d1 * sp) * L.road : 0) + rig.yaw * L.yaw, -L.max, L.max) * smoothstep(0.5, 4, sp);
-      if (!cam.init) {
-        rig.look = wantLook;
-        rig.lookV = rig.hx = rig.hxV = rig.hz = rig.hzV = rig.nod = 0;
-        rig.yaw = k.r;
-      }
-      rig.yaw = damp(rig.yaw, k.r, 8, dt);
-      spring(rig, "look", "lookV", wantLook, 9, dt);
-      spring(rig, "hx", "hxV", clamp(-k.ax * 0.006, -0.03, 0.065), 6, dt);
-      spring(rig, "hz", "hzV", clamp(k.ay * 0.0045, -0.06, 0.06), 6, dt);
-      rig.nod = damp(rig.nod, clamp(-k.ax * 0.004, -0.02, 0.035), 6, dt);
-      model.frame.updateMatrixWorld(true);
-      _v2.set(-0.36 + rig.hx, 0.93, rig.hz).applyMatrix4(model.frame.matrixWorld);
-      cam.x = _v2.x;
-      cam.y = _v2.y;
-      cam.z = _v2.z;
-      _v2.set(-0.36 + Math.cos(rig.look) * 8, 0.6 - rig.nod * 8, -Math.sin(rig.look) * 8).applyMatrix4(model.frame.matrixWorld);
-      cam.lx = _v2.x;
-      cam.ly = _v2.y;
-      cam.lz = _v2.z;
-      cam.init = true;
-      cam.fov = damp(cam.fov, 75 + 12 * Math.pow(f, 1.6) + (k.boosting ? 6 : 0), 5, dt);
-      cam.roll = damp(cam.roll, clamp(k.roll * 0.6 - k.ay * 3e-3, -0.1, 0.1), 6, dt);
     }
     function seatCam(k, dt, model) {
       const sp = Math.abs(k.u), f = clamp(sp / 22, 0, 1.2), S = SEAT;
@@ -13111,7 +12968,7 @@ void main(){
           const cd = Math.hypot(dxc, dzc);
           if (m.shake) {
             const S = m.shake;
-            if (k === player && G2.camMode === 1 && G2.state !== "menu" && SET.fahr !== "vorher" && SET.sitz !== "alt") {
+            if (k === player && G2.camMode === 1 && G2.state !== "menu") {
               const Q = SEAT, go = Math.hypot(k.u, k.v), v2 = Math.pow(clamp(go / 22, 0, 1), 2), kb = G2.kerb;
               const slide = Math.max(k.skidF, k.skidR), grind = Math.max(slide, Math.min(1, Math.max(k.wallRub, 0.6 * k.kartRub))) * clamp(go / 4, 0, 1);
               seatT += dt;
@@ -13159,9 +13016,8 @@ void main(){
           if (ck) camKart = ck;
         } else if (player) {
           const model = models[me.seat] || models[0];
-          const old = SET.fahr === "vorher";
-          if (G2.camMode === 1) (old ? onboardCamOld : SET.sitz !== "alt" ? seatCam : onboardCam)(player, dt, model);
-          else (old ? chaseCamOld : chaseCam)(player, dt, G2.camMode === 2);
+          if (G2.camMode === 1) seatCam(player, dt, model);
+          else chaseCam(player, dt, G2.camMode === 2);
           if (G2.state === "grid" && G2.gridT < 2.6) {
             const t = smoothstep(0, 2.6, G2.gridT);
             const a = player.th + Math.PI * (1 - t) * 0.92;
@@ -13175,8 +13031,8 @@ void main(){
         noiseT += dt * 38;
         const spd = camKart ? Math.hypot(camKart.u, camKart.v) : 0;
         G2.kerb = damp(G2.kerb, player && player.onKerb && G2.state !== "menu" ? clamp(spd / 8, 0, 1) : 0, player && player.onKerb ? 20 : 8, dt);
-        const seat = G2.camMode === 1 && SET.fahr !== "vorher" ? 1.5 : 1;
-        const calm = G2.camMode === 1 && SET.fahr !== "vorher" && SET.sitz !== "alt" && G2.state !== "menu";
+        const seat = G2.camMode === 1 ? 1.5 : 1;
+        const calm = G2.camMode === 1 && G2.state !== "menu";
         const buzz = G2.state === "menu" || calm ? 0 : (Math.pow(clamp(spd / 22, 0, 1), 2) * 0.012 + G2.kerb * 0.02) * seat;
         const jar = G2.shake * G2.shake * (calm ? SEAT.jar : 1), sh = jar * 0.1 + buzz;
         const kk = G2.camMode === 1 ? calm ? SEAT.kick : 0.3 : 1;
@@ -13203,7 +13059,7 @@ void main(){
           zone.intensity = clamp(m * 2.2, 0.25, 2.2);
           zone.position.set(camKart.x, camKart.y + 3.2, camKart.z);
         }
-        (models[me.seat] || models[0]).setOnboard(G2.camMode === 1 && G2.state !== "menu" && !afoot, SET.fahr !== "vorher" && SET.sitz !== "alt" ? SEAT.body : 0);
+        (models[me.seat] || models[0]).setOnboard(G2.camMode === 1 && G2.state !== "menu" && !afoot, SEAT.body);
         const boostNow = !!(player && player.boosting && G2.state !== "menu");
         if (boostNow && !G2.wasBoost) audio.boostOn();
         G2.wasBoost = boostNow;
@@ -13254,12 +13110,11 @@ void main(){
       }
     }
     status("");
-    $2("m-start").disabled = false;
-    $2("m-start").textContent = "Rennen starten";
     $2("m-walk").disabled = false;
+    $2("m-walk").textContent = "Halle betreten";
     attract();
     requestAnimationFrame(frame);
-    window.__ns = { guide, voice, voiceSay, stele, STELE, TERMS, LINK, linkAt, proj, flag, info, dash, models, gear, brief, deskOpen, deskClose, crew, crewCall, crewSeated, FIG, enterHall, leaveKart, footAct, foot, FOOT, SITE, PIT, setPit, startOutlap: meSit, startInlap: () => runSet("in"), hall, me, runSet, runStep, seat, holder, net, netOpen, netLeave, getOut, applyLook, LOOKS, G: G2, SET, race, audio, world, cam, camera, renderer, post, scene, track, models, beginRace, attract, setPaused, hud, fx, keys, AIDriver, HULL, HIT, KP, Kart, stepKart, steerLimit, FEELS, setFeel, nextFeel, rig, AHEAD, nextAhead, PHYS, setPhys, SEATS, setSeat, nextSeat, BACK, DEVICE, touch };
+    window.__ns = { guide, voice, voiceSay, stele, STELE, TERMS, LINK, linkAt, proj, flag, info, dash, models, gear, brief, deskOpen, deskClose, crew, crewCall, crewSeated, FIG, enterHall, leaveKart, footAct, foot, FOOT, SITE, PIT, setPit, startOutlap: meSit, startInlap: () => runSet("in"), hall, me, runSet, runStep, seat, holder, net, netOpen, netLeave, getOut, applyLook, LOOKS, G: G2, SET, race, audio, world, cam, camera, renderer, post, scene, track, models, beginRace, attract, setPaused, hud, fx, keys, AIDriver, HULL, HIT, KP, Kart, stepKart, steerLimit, FEELS, setFeel, rig, AHEAD, nextAhead, PHYS, setPhys, SEATS, setSeat, BACK, DEVICE, touch };
   }
   function buildEnv(renderer) {
     const THREE = window.THREE;
@@ -13317,16 +13172,15 @@ void main(){
       sync();
       syncs.push(sync);
     };
-    seg(["m-laps", "b-laps"], "laps", Number);
-    seg(["m-opp", "b-opp"], "opp", Number);
-    seg(["m-level", "b-level"], "level", Number);
+    seg("b-laps", "laps", Number);
+    seg("b-opp", "opp", Number);
+    seg("b-level", "level", Number);
     seg("b-quali", "quali", String);
-    seg(["m-gfx", "p-gfx"], "gfx", String);
-    seg(["m-ahead", "p-ahead"], "blick", String);
-    seg(["m-seat", "p-seat"], "sitz", String);
-    seg(["m-hud", "p-hud"], "anzeige", String);
-    seg(["m-touch", "p-touch"], "touch", String);
-    for (const [ids, key] of [[["m-music", "p-music"], "music"], [["m-sfx", "p-sfx"], "sfx"]]) {
+    seg("p-gfx", "gfx", String);
+    seg("p-ahead", "blick", String);
+    seg("p-hud", "anzeige", String);
+    seg("p-touch", "touch", String);
+    for (const [ids, key] of [[["p-music"], "music"], [["p-sfx"], "sfx"]]) {
       const els = ids.map($2);
       const sync = () => {
         for (const el of els) el.value = String(Math.round(SET[key] * 100));
