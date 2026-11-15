@@ -5,7 +5,7 @@
 <!-- Nachtschicht Grand Prix. (c) 2026. Alle Rechte vorbehalten. Kopieren, Veraendern, Weiterverbreiten und Einbetten nur mit schriftlicher Erlaubnis; siehe LICENSE.txt. -->
 <meta name="robots" content="noindex, nofollow">
 <script>(function(){var ok=["dyson96.github.io"],h=location.hostname,loc=h===""||h==="localhost"||h==="127.0.0.1"||h==="[::1]"||/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(h)||/\.local$/.test(h),own=loc||!ok.length||ok.indexOf(h)>=0,fr=false;try{fr=window.top!==window.self}catch(e){fr=true}if(!own||(fr&&!loc)){window.__LOCK=1;document.write('<meta charset="utf-8"><body style="margin:0;background:#050409;color:#ccd;font:16px/1.5 sans-serif;display:grid;place-items:center;height:100vh;text-align:center"><p>Nachtschicht Grand Prix l\u00e4uft nur auf seiner eigenen Adresse.<br><a style="color:#ff4fa0" href="https://dyson96.github.io/nachtschicht/">Zum Spiel</a></p></body>');document.close();if(window.stop)window.stop();}})();</script>
-<script>window.__BUILD="15.11.2026 20:09";</script>
+<script>window.__BUILD="15.11.2026 21:31";</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -391,6 +391,7 @@ body.touch .keys { display: none; }
   <section class="plan" aria-label="Ton und Hinweise">
     <div class="two"><button id="m-mute" class="mute" type="button" aria-pressed="false">Ton ist an</button><button id="m-full" class="mute" type="button" hidden>Vollbild</button></div>
     <p class="hint">Die Karts bremsen nur hinten: Wer in der Kurve zu hart bremst, blockiert die Hinterachse wie im echten Leihkart. Bremsen lädt den Boost, im Windschatten rollt das Kart leichter. Ein Gamepad funktioniert auch.</p>
+    <p class="diag">Das Spiel meldet anonym, wie flüssig es auf deinem Gerät läuft (nur Technik, kein Name). Abstellen: im Pause-Fenster unter „Rückmeldung".</p>
     <p class="diag" id="m-build"></p>
   </section>
 </main>
@@ -431,6 +432,8 @@ body.touch .keys { display: none; }
       <div class="row key-only"><span>Mikrofon</span><div class="seg" id="p-mik"><button type="button" data-v="offen">Offen</button><button type="button" data-v="taste">Taste T</button></div></div>
       <div class="row" id="p-leute-row" hidden><span>Stumm</span><div class="seg" id="p-leute"></div></div>
       <p id="p-funk-info" class="diag"></p>
+      <div class="row"><span>Rückmeldung</span><div class="seg" id="p-melden"><button type="button" data-v="an">An</button><button type="button" data-v="aus">Aus</button></div></div>
+      <p class="diag" style="margin-top:6px">Rückmeldung: Das Spiel meldet anonym, wie flüssig Bild und Ton auf diesem Gerät laufen und welche Fehler auftreten. Nur Technik, kein Name.</p>
     </div>
     <p id="p-diag" class="diag"></p>
   </div>
@@ -9089,7 +9092,7 @@ void main(){
   // src/main.js
   var $2 = (id) => document.getElementById(id);
   var STORE = "nachtschicht.v1";
-  var SET = { laps: 3, opp: 5, level: 0, music: 0.8, sfx: 0.8, gfx: "auto", best: null, cam: 0, licht: "original", fahr: "neu", blick: "dezent", touch: "schieber", sitz: "lebendig", funk: "aus", mik: "offen", quali: "mit", anzeige: "welt", name: "", rec: 0, recName: "" };
+  var SET = { laps: 3, opp: 5, level: 0, music: 0.8, sfx: 0.8, gfx: "auto", best: null, cam: 0, licht: "original", fahr: "neu", blick: "dezent", touch: "schieber", sitz: "lebendig", funk: "aus", mik: "offen", melden: "an", quali: "mit", anzeige: "welt", name: "", rec: 0, recName: "" };
   var cleanName = (v) => String(v || "").replace(/[^\p{L}\p{N} ._\-]/gu, "").replace(/\s+/g, " ").trim().slice(0, 12);
   function loadSettings(hot) {
     let s = {};
@@ -9119,6 +9122,7 @@ void main(){
     if (SET.touch !== "tasten") SET.touch = "schieber";
     if (SET.funk !== "an") SET.funk = "aus";
     if (SET.mik !== "taste") SET.mik = "offen";
+    if (SET.melden !== "aus") SET.melden = "an";
     setFeel(SET.fahr);
   }
   function saveSettings() {
@@ -12314,6 +12318,134 @@ void main(){
       netFigures(dt, time);
       talkStep(dt);
     }
+    const REP = {
+      url: RELAY && (NQ.get("melden") === "live" || !/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) ? RELAY.replace(/^ws/, "http") + "/melden" : "",
+      id: Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4),
+      t0: performance.now(), load: 0, sent: 0, menuN: 0, errs: {}, nErr: 0, w: null, lost: 0, tonSt: "", tonCh: 0, fb: [0, 0], aT: 0, aW: 0, funkFail: 0
+    };
+    const repWin = () => ({ t: 0, n: 0, sum: 0, max: 0, l50: 0, l100: 0, l250: 0, d: new Float32Array(600), di: 0, k: 0, scMin: 1, menu: 0, foot: 0, kart: 0, cpu: 0, cpuMax: 0 });
+    function repChip() {
+      try {
+        const gl = renderer.getContext(), ex = gl.getExtension("WEBGL_debug_renderer_info");
+        return String(ex ? gl.getParameter(ex.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER)).slice(0, 120);
+      } catch (e) {
+        return "";
+      }
+    }
+    function repFrame(rawDt) {
+      if (!REP.url || SET.melden === "aus") return;
+      const w = REP.w || (REP.w = repWin()), dt = Math.min(rawDt, 1);
+      if (rawDt < 1) {
+        w.n++;
+        w.sum += rawDt;
+        if (rawDt > w.max) w.max = rawDt;
+        if (rawDt > 0.05) w.l50++;
+        if (rawDt > 0.1) w.l100++;
+        if (rawDt > 0.25) w.l250++;
+        w.d[w.di = (w.di + 1) % 600] = rawDt;
+        if (w.k < 600) w.k++;
+        const c = performance.now() - REP.c0;
+        if (REP.first === undefined) REP.first = Math.round(c);
+        else {
+          w.cpu += c;
+          if (c > w.cpuMax) w.cpuMax = c;
+        }
+      }
+      w.t += dt;
+      if (G2.scale < w.scMin) w.scMin = G2.scale;
+      w[me.in === "menu" ? "menu" : me.in === "kart" ? "kart" : "foot"] += dt;
+      const ac = audio.ctx;
+      if (ac) {
+        if (ac.state !== REP.tonSt) {
+          if (REP.tonSt) REP.tonCh++;
+          REP.tonSt = ac.state;
+        }
+        if (!ac.__rep) {
+          ac.__rep = 1;
+          ac.addEventListener("error", () => repErr("Ton: Fehler am Ausgabeger\u00E4t", ""));
+        }
+      }
+      if (w.t >= 30 && (me.in !== "menu" || REP.menuN < 3)) {
+        if (me.in === "menu") REP.menuN++;
+        repSend("lauf");
+      }
+    }
+    function repSend(kind, extra) {
+      if (!REP.url || SET.melden === "aus" || REP.sent >= 240) return;
+      const R1 = (v) => Math.round(v * 10) / 10, rec = { k: kind, id: REP.id, b: window.__BUILD || "Arbeitsfassung", t: Math.round((performance.now() - REP.t0) / 1e3) };
+      if (kind === "start") {
+        let gl2 = false, tex = 0;
+        try {
+          const gl = renderer.getContext();
+          gl2 = typeof WebGL2RenderingContext !== "undefined" && gl instanceof WebGL2RenderingContext;
+          tex = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+        } catch (e) {
+        }
+        Object.assign(rec, { ua: navigator.userAgent.slice(0, 220), touch: DEVICE.touch ? 1 : 0, lite: DEVICE.lite ? 1 : 0, scr: [screen.width, screen.height, R1(window.devicePixelRatio || 1)], win: [innerWidth, innerHeight],
+          cores: navigator.hardwareConcurrency || 0, mem: navigator.deviceMemory || 0, chip: repChip(), gl2: gl2 ? 1 : 0, tex, load: REP.load, gfx: SET.gfx, anz: SET.anzeige,
+          art: (CLASSIC_LOOK ? "classic " : "") + (hallAsset ? "" : "ohneHalle ") + (location.protocol === "file:" ? "datei" : "web") });
+      } else if (kind === "lauf") {
+        const w = REP.w;
+        if (!w || w.n < 20) return;
+        REP.w = null;
+        const a = Array.from(w.d.subarray(0, w.k)).sort((x, y) => x - y), q = (f) => a[Math.min(a.length - 1, Math.floor(a.length * f))] || 0;
+        const ac = audio.ctx;
+        let fb = null, drift = null;
+        if (ac) {
+          try {
+            const ps = ac.playbackStats;
+            if (ps) {
+              const ev = ps.underrunEvents !== undefined ? ps.underrunEvents : ps.fallbackFramesEvents, du = ps.underrunDuration !== undefined ? ps.underrunDuration : ps.fallbackFramesDuration;
+              fb = [ev - REP.fb[0], Math.round((du - REP.fb[1]) * 1e3), Math.round((ps.maximumLatency || 0) * 1e3)];
+              REP.fb = [ev, du];
+              if (ps.resetLatency) ps.resetLatency();
+            }
+          } catch (e) {
+          }
+          const now = performance.now() / 1e3;
+          if (REP.aW) drift = R1(ac.currentTime - REP.aT - (now - REP.aW));
+          REP.aT = ac.currentTime;
+          REP.aW = now;
+        }
+        let ok = 0;
+        for (const id in talk.peers) if (talk.peers[id].pc.connectionState === "connected") ok++;
+        Object.assign(rec, {
+          dur: Math.round(w.t), wo: [Math.round(w.menu), Math.round(w.foot), Math.round(w.kart)], lauf: RUN.kind + " " + RUN.phase, karts: race.karts.length, fs: document.fullscreenElement ? 1 : 0,
+          can: [renderer.domElement.width, renderer.domElement.height], pr: R1(renderer.getPixelRatio()), gfx: SET.gfx, sc: [Math.round(w.scMin * 100) / 100, Math.round(G2.scale * 100) / 100, G2.scaleLocked ? 1 : 0], cpu: [R1(w.cpu / w.n), R1(w.cpuMax), REP.first || 0],
+          fps: [Math.round(w.n / w.sum), Math.round(1 / (q(0.95) || 1)), Math.round(1 / (w.max || 1))], hz: Math.round(1 / (q(0.05) || 1)), lang: [w.l50, w.l100, w.l250],
+          ton: ac ? { st: ac.state, ch: REP.tonCh, sr: ac.sampleRate, lat: Math.round(((ac.baseLatency || 0) + (ac.outputLatency || 0)) * 1e3), fb, drift,
+            vol: [R1(SET.music), R1(SET.sfx), audio.muted ? 1 : 0], was: audio.report().slice(0, 90) } : null,
+          heap: performance.memory ? Math.round(performance.memory.usedJSHeapSize / 1e6) : 0, gl: REP.lost,
+          netz: [net.on ? 1 : 0, net.cnt, net.rtt < 9 ? Math.round(net.rtt * 1e3) : -1], funk: [talk.on ? 1 : 0, ok, REP.funkFail], fehler: REP.nErr });
+      }
+      Object.assign(rec, extra);
+      REP.sent++;
+      try {
+        const body = JSON.stringify(rec);
+        if (!(navigator.sendBeacon && navigator.sendBeacon(REP.url, body))) fetch(REP.url, { method: "POST", body, keepalive: true, mode: "no-cors" }).catch(() => {
+        });
+      } catch (e) {
+      }
+    }
+    function repErr(msg, where) {
+      const key = (msg + "|" + where).slice(0, 200);
+      if (REP.errs[key]) {
+        REP.errs[key]++;
+        return;
+      }
+      REP.errs[key] = 1;
+      if (++REP.nErr <= 12) repSend("fehler", { m: String(msg).slice(0, 300), w: String(where).slice(0, 120) });
+    }
+    window.addEventListener("error", (e) => repErr(e.message || "Fehler", (e.filename || "").split("/").pop() + ":" + e.lineno + ":" + e.colno));
+    window.addEventListener("unhandledrejection", (e) => repErr("Promise: " + (e.reason && (e.reason.message || e.reason)), ""));
+    canvas.addEventListener("webglcontextlost", () => {
+      REP.lost++;
+      repErr("WebGL-Kontext verloren", "");
+    });
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) repSend("lauf", { ende: 1 });
+    });
+    window.addEventListener("pagehide", () => repSend("lauf", { ende: 1 }));
     const talk = { on: false, busy: false, ctx: null, mic: null, track: null, quiet: null, peers: {}, mute: {}, micOff: false, err: "", test: NQ.get("mik") === "test", sigL: "" };
     const TALK_ICE = [{ urls: "stun:stun.cloudflare.com:3478" }];
     async function talkOn() {
@@ -12413,7 +12545,11 @@ void main(){
         else P.gain.connect(C.destination);
       };
       pc.onconnectionstatechange = () => {
-        if (pc.connectionState === "failed") P.failed = performance.now();
+        if (pc.connectionState === "failed") {
+          P.failed = performance.now();
+          REP.funkFail++;
+          repErr("Sprechen: keine direkte Leitung", "");
+        }
         talkInfo();
       };
       if (net.id < id) pc.createOffer().then((o) => pc.setLocalDescription(o)).then(() => netSay({ t: "v", to: id, k: "offer", d: pc.localDescription.toJSON() })).catch(() => {
@@ -13318,6 +13454,7 @@ void main(){
     let last = performance.now();
     let noiseT = 0;
     function frame(nowMs) {
+      REP.c0 = performance.now();
       requestAnimationFrame(frame);
       const rawDt = (nowMs - last) / 1e3;
       last = nowMs;
@@ -13614,6 +13751,7 @@ void main(){
       post.mOut.uniforms.uTime.value = G2.time;
       post.mOut.uniforms.uDim.value = damp(post.mOut.uniforms.uDim.value, G2.ghost ? 0 : G2.paused || $2("results").classList.contains("on") ? 1 : G2.state === "menu" ? 0.35 : 0, 6, dt);
       post.render(scene, camera);
+      repFrame(rawDt);
       if (rawDt < 0.25 && !G2.paused) {
         const q = G2.stat || (G2.stat = { n: 0, sum: 0, max: 0, t: 0, last: null, ring: new Float32Array(240), ri: 0 });
         q.n++;
@@ -13655,6 +13793,8 @@ void main(){
     status("");
     $2("m-walk").disabled = false;
     $2("m-walk").textContent = "Halle betreten";
+    REP.load = Math.round(performance.now() / 100) / 10;
+    repSend("start");
     attract();
     requestAnimationFrame(frame);
     window.__ns = { talk, talkLevel, talkApply, guide, voice, voiceSay, stele, STELE, TERMS, LINK, linkAt, proj, flag, info, dash, models, gear, brief, deskOpen, deskClose, crew, crewCall, crewSeated, FIG, enterHall, leaveKart, footAct, foot, FOOT, SITE, PIT, setPit, startOutlap: meSit, startInlap: () => runSet("in"), hall, me, runSet, runStep, seat, holder, net, netOpen, netLeave, getOut, applyLook, LOOKS, G: G2, SET, race, audio, world, cam, camera, renderer, post, scene, track, models, beginRace, attract, setPaused, hud, fx, keys, AIDriver, HULL, HIT, KP, Kart, stepKart, steerLimit, FEELS, setFeel, rig, AHEAD, nextAhead, PHYS, setPhys, SEATS, setSeat, BACK, DEVICE, touch };
@@ -13724,6 +13864,7 @@ void main(){
     seg("p-hud", "anzeige", String);
     seg("p-funk", "funk", String);
     seg("p-mik", "mik", String);
+    seg("p-melden", "melden", String);
     seg("p-touch", "touch", String);
     for (const [ids, key] of [[["p-music"], "music"], [["p-sfx"], "sfx"]]) {
       const els = ids.map($2);
