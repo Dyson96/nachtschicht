@@ -5,7 +5,7 @@
 <!-- Nachtschicht Grand Prix. (c) 2026. Alle Rechte vorbehalten. Kopieren, Veraendern, Weiterverbreiten und Einbetten nur mit schriftlicher Erlaubnis; siehe LICENSE.txt. -->
 <meta name="robots" content="noindex, nofollow">
 <script>(function(){var ok=["dyson96.github.io"],h=location.hostname,loc=h===""||h==="localhost"||h==="127.0.0.1"||h==="[::1]"||/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(h)||/\.local$/.test(h),own=loc||!ok.length||ok.indexOf(h)>=0,fr=false;try{fr=window.top!==window.self}catch(e){fr=true}if(!own||(fr&&!loc)){window.__LOCK=1;document.write('<meta charset="utf-8"><body style="margin:0;background:#050409;color:#ccd;font:16px/1.5 sans-serif;display:grid;place-items:center;height:100vh;text-align:center"><p>Nachtschicht Grand Prix l\u00e4uft nur auf seiner eigenen Adresse.<br><a style="color:#ff4fa0" href="https://dyson96.github.io/nachtschicht/">Zum Spiel</a></p></body>');document.close();if(window.stop)window.stop();}})();</script>
-<script>window.__BUILD="15.11.2026 13:29";</script>
+<script>window.__BUILD="15.11.2026 13:34";</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -11539,7 +11539,8 @@ void main(){
     }
     const NQ = new URLSearchParams(location.search);
     const net = {
-      url: NQ.get("relay") || RELAY, code: cleanName(NQ.get("halle") || "").toUpperCase().replace(/[^A-Z0-9]/g, ""),
+      url: /^ws:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(NQ.get("relay") || "") ? NQ.get("relay") : RELAY,
+      code: cleanName(NQ.get("halle") || "").toUpperCase().replace(/[^A-Z0-9]/g, ""),
       ws: null, on: false, id: 0, hostId: 0, off: 0, rtt: 1e9, pingT: 0, cT: 0, hT: 0, got: 0, people: {}, sigF: "", sigS: "", lost: ""
     };
     hall.now = () => performance.now() / 1e3 + net.off;
