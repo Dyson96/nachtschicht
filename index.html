@@ -5,7 +5,7 @@
 <!-- Nachtschicht Grand Prix. (c) 2026. Alle Rechte vorbehalten. Kopieren, Veraendern, Weiterverbreiten und Einbetten nur mit schriftlicher Erlaubnis; siehe LICENSE.txt. -->
 <meta name="robots" content="noindex, nofollow">
 <script>(function(){var ok=["dyson96.github.io"],h=location.hostname,loc=h===""||h==="localhost"||h==="127.0.0.1"||h==="[::1]"||/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(h)||/\.local$/.test(h),own=loc||!ok.length||ok.indexOf(h)>=0,fr=false;try{fr=window.top!==window.self}catch(e){fr=true}if(!own||(fr&&!loc)){window.__LOCK=1;document.write('<meta charset="utf-8"><body style="margin:0;background:#050409;color:#ccd;font:16px/1.5 sans-serif;display:grid;place-items:center;height:100vh;text-align:center"><p>Nachtschicht Grand Prix l\u00e4uft nur auf seiner eigenen Adresse.<br><a style="color:#ff4fa0" href="https://dyson96.github.io/nachtschicht/">Zum Spiel</a></p></body>');document.close();if(window.stop)window.stop();}})();</script>
-<script>window.__BUILD="15.11.2026 18:00";</script>
+<script>window.__BUILD="15.11.2026 18:43";</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -365,7 +365,7 @@ body.touch .keys { display: none; }
       <span class="best">Deine Bestzeit: <b id="m-best">noch keine</b></span>
     </div>
     <div id="m-status" role="status">Strecke wird geladen …</div>
-    <p class="thumbs touch-only">Linker Daumen lenkt, rechter Daumen gibt Gas und bremst. Boost gibt selbst Gas: einfach den Daumen vom Gas nach oben schieben. Am linken Rand: Pause, Kamera, zurück auf die Strecke.</p>
+    <p class="thumbs touch-only">Linker Daumen lenkt, rechter Daumen gibt Gas und bremst. Boost gibt selbst Gas: einfach den Daumen vom Gas nach oben schieben. Am linken Rand: Pause, Kamera, Automatik (↺).</p>
     <p class="thumbs touch-only" id="m-ios" hidden>Vollbild am iPhone: im Browser auf „Teilen" tippen, dann „Zum Home-Bildschirm". Von dort gestartet füllt das Spiel den ganzen Bildschirm.</p>
     <ul class="keys" aria-label="Steuerung">
       <li><kbd>W</kbd><kbd>↑</kbd> Gas</li>
@@ -374,7 +374,7 @@ body.touch .keys { display: none; }
       <li><kbd>Leertaste</kbd> Boost</li>
       <li><kbd>C</kbd> Kamera: hinter dem Kart, im Sitz, weit</li>
       <li><kbd>K</kbd> Kamera-Blick in die Kurve: fest / dezent / voraus</li>
-      <li><kbd>R</kbd> zurück auf die Strecke</li>
+      <li><kbd>R</kbd> Automatik: das Kart parkt selbst ein (im Rennen: zurück auf die Strecke)</li>
       <li><kbd>Esc</kbd> Pause</li>
       <li><kbd>M</kbd> Ton</li>
       <li><kbd>J</kbd> nächster Musiktitel</li>
@@ -480,7 +480,7 @@ body.touch .keys { display: none; }
   </div>
   <button class="mini" id="t-pause" type="button" aria-label="Pause">II</button>
   <button class="mini" id="t-cam" type="button" aria-label="Kamera wechseln">Sicht</button>
-  <button class="mini" id="t-rescue" type="button" aria-label="Zurück auf die Strecke">↺</button>
+  <button class="mini" id="t-rescue" type="button" aria-label="Automatik: das Kart fährt und parkt selbst">↺</button>
 </div>
 <div id="rotate"><div><span>⟳</span>Bitte das Handy quer halten.</div></div>
 
@@ -2334,11 +2334,16 @@ body.touch .keys { display: none; }
         k.qS = k.s;
         k.qStart = 0;
         k.qTime = Infinity;
+        k.qAuto = false;
+        k.nearT = 0;
+        k.nearSaid = false;
+        if (k.auto && k.own) this.autoGive(k, "neu");
         const sl = this.slotOf(k), o = tr.at(sl.s, {});
         k.gs = sl.s;
         k.gd = sl.d;
         k.gx = o.x - Math.sin(o.th) * sl.d;
         k.gz = o.z - Math.cos(o.th) * sl.d;
+        k.gth = o.th;
       }
       this.pitDrivers = this.ai.slice();
       if (this.autoPlayer && this.player) this.pitDrivers.push(new AIDriver(this.player, tr, this.vref, { skill: 0.9, seed: 5 }));
@@ -2368,6 +2373,9 @@ body.touch .keys { display: none; }
         k.bx = bb.x;
         k.bz = bb.z;
         k.bth = bb.th;
+        k.nearT = 0;
+        k.nearSaid = false;
+        if (k.auto && k.own) this.autoGive(k, "neu");
       }
       this.pitDrivers = this.ai.slice();
       if (this.autoPlayer && this.player) this.pitDrivers.push(new AIDriver(this.player, tr, this.vref, { skill: 0.9, seed: 5 }));
@@ -2391,6 +2399,7 @@ body.touch .keys { display: none; }
         k.gd = sl.d;
         k.gx = o.x - Math.sin(o.th) * sl.d;
         k.gz = o.z - Math.cos(o.th) * sl.d;
+        k.gth = o.th;
       }
     }
     qualiClose() {
@@ -2408,6 +2417,7 @@ body.touch .keys { display: none; }
         k.gd = sl.d;
         k.gx = o.x - Math.sin(o.th) * sl.d;
         k.gz = o.z - Math.cos(o.th) * sl.d;
+        k.gth = o.th;
         if (k.set) k.place(tr, k.gs, k.gd, 0);
       });
       this.order = order;
@@ -2415,7 +2425,7 @@ body.touch .keys { display: none; }
     }
     pitStep(dt) {
       const tr = this.track, L = tr.L, P = this.player, auto = !!this.autoPlayer, inn = this.pitMode === "in", lz = this.pit.lane, qOn = !!this.quali && !inn;
-      const person = (k) => k.human && !(auto && k === P);
+      const person = (k) => k.human && !(auto && k === P) && !k.auto;
       const self = (k) => person(k) && k.own;
       if (this.pitHold) {
         this.pitT = 0;
@@ -2423,6 +2433,7 @@ body.touch .keys { display: none; }
         for (const k of this.karts) if (k.human) k.hold = true;
         return;
       }
+      for (const k of this.karts) if (k.auto && k.own && k.set) this.autoGive(k, "da");
       this.pitT += dt;
       let allSet = true, lane = false;
       const inPit = (k) => k.z > 31.7 && k.x > -47 && k.x < 21;
@@ -2432,6 +2443,15 @@ body.touch .keys { display: none; }
           if (o === k) continue;
           const dx = o.x - k.x, dz = o.z - k.z, f = dx * c + dz * sn;
           if (f > 0.4 && f < reach && Math.abs(-dx * sn + dz * c) < 1.25) return true;
+        }
+        return false;
+      };
+      const behind = (k, reach) => {
+        const c = Math.cos(k.th), sn = -Math.sin(k.th);
+        for (const o of this.karts) {
+          if (o === k) continue;
+          const dx = o.x - k.x, dz = o.z - k.z, f = dx * c + dz * sn;
+          if (f < -0.4 && f > -reach && Math.abs(-dx * sn + dz * c) < 1.25) return true;
         }
         return false;
       };
@@ -2474,6 +2494,7 @@ body.touch .keys { display: none; }
         k.prevS = k.s;
         k.hold = true;
         k.set = true;
+        k.u = k.v = k.r = 0;
         k.input.throttle = k.input.brake = k.input.steer = 0;
       };
       const box = (k) => {
@@ -2502,7 +2523,7 @@ body.touch .keys { display: none; }
             k.qStart = t;
           } else {
             k.q = 2;
-            k.qTime = t - k.qStart;
+            k.qTime = k.qAuto ? Infinity : t - k.qStart;
           }
         }
         if (this.host && !this.qDone) {
@@ -2511,7 +2532,7 @@ body.touch .keys { display: none; }
             if (k.q < 2) all = false;
             else if (!inPit(k) && k.s > L - 75 && k.s < L - 30) close = true;
           }
-          const waitP = this.pitT < 300 && this.karts.some((k) => person(k) && !k.set && (k.q === 1 || k.q === 0 && !k.hold && !inPit(k)));
+          const waitP = this.pitT < 300 && this.karts.some((k) => (person(k) || k.human && k.auto) && !k.set && (k.q === 1 || k.q === 0 && !k.hold && !inPit(k)));
           if (all || close && !waitP || this.pitT > 330) this.qualiClose();
         }
       }
@@ -2606,7 +2627,7 @@ body.touch .keys { display: none; }
             drive(k, o.x - Math.sin(o.th) * 2.6, o.z - Math.cos(o.th) * 2.6, k.s > L - 75 || ahead(k, 5.5) ? 0 : 5);
             d.idle = 0;
           } else {
-            d.capV = qOn && k.q === 1 ? 0 : gapped(k, qOn && k.q === 2 ? 14 : 17);
+            d.capV = qOn && k.q === 1 && !k.auto ? 0 : gapped(k, k.auto ? 11 : qOn && k.q === 2 ? 14 : 17);
             d.update(dt, this.karts, this.pitT + 10);
             if (d.resetWanted) this.putBack(k, d);
           }
@@ -2623,9 +2644,21 @@ body.touch .keys { display: none; }
             if (qOn) dd = 0;
             else if (Math.abs(q.gd - k.gd) < 1) dd = -Math.sign(k.gd) * 0.9;
           }
-          const tx = far < 5 ? k.gx : o.x - Math.sin(o.th) * dd, tz = far < 5 ? k.gz : o.z - Math.cos(o.th) * dd;
-          drive(k, tx, tz, ahead(k, 3) ? 0 : Math.min(qOn && dd === 0 ? 4.5 : 7, Math.sqrt(2 * 2.2 * Math.max(0, far - 0.25))), far < 1.3);
-          if (far < 0.5 && Math.abs(k.u) < 0.8 || gap < -0.4) box(k);
+          const on2 = 2.5 - far, tx = far < 5 ? k.gx + Math.cos(k.gth) * on2 : o.x - Math.sin(o.th) * dd, tz = far < 5 ? k.gz - Math.sin(k.gth) * on2 : o.z - Math.cos(o.th) * dd;
+          if (!d.rev && gap < -0.25) d.rev = 0.6;
+          if (d.rev) {
+            const inp = k.input, on = gap < d.rev && !behind(k, 2.6);
+            inp.analog = true;
+            inp.steer = clamp(-2.5 * wrapAngle(k.gth - k.th), -0.6, 0.6);
+            inp.boost = false;
+            inp.brake = on && k.u > -1.4 ? 1 : 0;
+            inp.throttle = !on && k.u < -0.25 ? 0.35 : 0;
+            if (!on && Math.abs(k.u) < 0.3) d.rev = 0;
+            d.idle = 0;
+          } else {
+            drive(k, tx, tz, ahead(k, 3) ? 0 : Math.min(qOn && dd === 0 ? 4.5 : 7, far > 0.1 ? Math.max(0.8, Math.sqrt(2 * 2.2 * Math.max(0, far - 0.08))) : 0));
+            if (far <= 0.2 && Math.abs(k.u) < 0.12) stay(k);
+          }
         } else if (d.mode === "lapin") {
           let toIn = L - 27 - k.s;
           if (toIn < -L / 2) toIn += L;
@@ -2638,24 +2671,50 @@ body.touch .keys { display: none; }
             d.idle = 0;
             d.path = [[-43.5, 30.6], [-41.6, 32.8], [-39.6, 35.6]];
             if (k.bx - 4.2 > -38.5) d.path.push([k.bx - 4.2, lz + 0.6]);
-            d.path.push([k.bx - 1.9, k.bz - 2.2], [k.bx, k.bz]);
+            d.path.push([k.bx - 1.9, k.bz - 2.2], [k.bx + 1.5 * Math.cos(k.bth), k.bz - 1.5 * Math.sin(k.bth)]);
           }
         } else {
           lane = true;
-          const last = d.pi >= d.path.length - 1, dist = Math.hypot(k.bx - k.x, k.bz - k.z);
-          follow(d, k, ahead(k, 3.4) ? 0 : last ? Math.min(4, Math.sqrt(2 * 1.8 * Math.max(0, dist - 0.3))) : 5, 3.5);
-          if (dist < 0.6 && Math.abs(k.u) < 0.9 || last && dist < 0.35) park(k);
+          const al = (k.x - k.bx) * Math.cos(k.bth) - (k.z - k.bz) * Math.sin(k.bth);
+          if (d.rev) {
+            const on = (d.rev === 1 ? k.x > k.bx - 4.6 : al > -4.8 && k.z > lz + 0.8) && !behind(k, 2.6), inp = k.input;
+            inp.analog = true;
+            inp.steer = clamp(-3.5 * wrapAngle((d.rev === 1 ? 0 : k.bth) - k.th), -0.9, 0.9);
+            inp.boost = false;
+            inp.brake = on && k.u > -1.4 ? 1 : 0;
+            inp.throttle = !on && k.u < -0.25 ? 0.35 : 0;
+            if (!on && Math.abs(k.u) < 0.3) {
+              d.rev = 0;
+              d.pi = 0;
+              d.path = [[k.bx - 1.9, k.bz - 2.2], [k.bx + 1.5 * Math.cos(k.bth), k.bz - 1.5 * Math.sin(k.bth)]];
+            }
+            d.idle = 0;
+          } else {
+            const last = d.pi >= d.path.length - 1, rem = -al;
+            follow(d, k, ahead(k, 3.4) ? 0 : last ? Math.min(4, rem > 0.1 ? Math.max(0.8, Math.sqrt(2 * 1.8 * Math.max(0, rem - 0.08))) : 0) : 5, last ? 2.8 : 3.5);
+            if (last && rem <= 0.2 && Math.abs(k.u) < 0.12) stay(k);
+          }
         }
       }
       for (const H of this.karts) if (self(H) && !H.set) {
         allSet = false;
         if (inPit(H)) lane = true;
-        if (inn) {
-          if (Math.hypot(H.bx - H.x, H.bz - H.z) < 1.4 && Math.abs(H.u) < 1.2 || this.pitT > 300) park(H);
-        } else if (this.pitT > (qOn ? 420 : 260)) {
-          if (!this.qDone) this.qualiClose();
-          box(H);
-        } else if (this.qDone && Math.hypot(H.gx - H.x, H.gz - H.z) < 1.5 && Math.abs(H.u) < 1.3) box(H);
+        const ready = inn || this.qDone, dist = ready ? Math.hypot((inn ? H.bx : H.gx) - H.x, (inn ? H.bz : H.gz) - H.z) : 1e3;
+        H.parkD = dist;
+        if (dist < (inn ? 0.75 : 0.6) && Math.abs(H.u) < 0.25 && Math.abs(wrapAngle(H.th - (inn ? H.bth : H.gth))) < (inn ? 0.5 : 0.3)) {
+          stay(H);
+          continue;
+        }
+        H.nearT = dist < 7 && Math.abs(H.u) < 0.4 ? (H.nearT || 0) + dt : 0;
+        if (dist > 10) H.nearSaid = false;
+        if (H.nearT > 3.5 && !H.nearSaid) {
+          H.nearSaid = true;
+          this.events.push({ type: "park", k: H });
+        }
+        if (this.pitT > (inn ? 300 : qOn ? 420 : 260)) {
+          if (!inn && !this.qDone) this.qualiClose();
+          this.autoTake(H, "frist", true);
+        } else if (H.nearT > 15) this.autoTake(H, "platz");
       }
       if (!this.host) return;
       for (const k of this.karts) if (!k.own && !k.set) {
@@ -2668,6 +2727,71 @@ body.touch .keys { display: none; }
         else this.formed = true;
       }
     }
+    autoTake(k, why, fin) {
+      if (!k || !k.own || !k.human || k.set || this.state !== "pit") return false;
+      if (k.auto) {
+        if (fin) k.autoFin = true;
+        return true;
+      }
+      const tr = this.track, L = tr.L, inn = this.pitMode === "in", lz = this.pit.lane, d = new AIDriver(k, tr, this.vref, { skill: 0.9, seed: 5 });
+      const lane = k.z > 33.3 && k.x > -47 && k.x < 21;
+      d.release = 0;
+      d.capV = 11;
+      d.pi = 0;
+      d.idle = 0;
+      d.bias = null;
+      d.rubber = 1;
+      d.phase = "drive";
+      d.stuck = 0;
+      d.resetWanted = false;
+      d.rev = 0;
+      d.path = null;
+      if (inn) {
+        if (!lane) d.mode = "lapin";
+        else {
+          d.mode = "in";
+          if (k.z > 38.9) d.rev = 2;
+          else if (k.x > k.bx - 3) d.rev = 1;
+          d.path = [[k.bx - 1.9, k.bz - 2.2], [k.bx + 1.5 * Math.cos(k.bth), k.bz - 1.5 * Math.sin(k.bth)]];
+          if (!d.rev && k.x < k.bx - 5.4) d.path.unshift([k.bx - 4.2, lz + 0.6]);
+        }
+      } else if (k.hold) d.mode = "bay";
+      else if (lane && k.z > 38.9 && Math.abs(wrapAngle(k.th + Math.PI / 4)) < 0.7) {
+        d.mode = "back";
+        d.x0 = k.x;
+        d.z0 = k.z;
+      } else if (lane) {
+        d.mode = "out";
+        d.path = [[k.x + 1.2, Math.min(k.z, lz + 1.2)]].concat([[9, lz + 0.3], [10, lz], [13.5, lz - 0.8], [15.8, lz - 2.6], [17.2, 31.6], [20.5, 30.2], [26, 29.4], [32, 29.2]].filter((q) => q[0] > k.x + 2));
+      } else {
+        let gap = k.gs - k.s;
+        if (gap > L / 2) gap -= L;
+        else if (gap < -L / 2) gap += L;
+        const near = this.qDone && (!this.quali || k.q === 2) && gap > -9 && gap < 24;
+        const side = (k.x - k.gx) * Math.sin(k.gth) + (k.z - k.gz) * Math.cos(k.gth);
+        d.mode = near ? "grid" : "lap";
+        if (near && gap < 6 && (gap < 0.3 || Math.abs(side) > 0.25 || Math.abs(wrapAngle(k.th - k.gth)) > 0.1)) d.rev = 6;
+      }
+      if (this.quali && !inn && k.q < 2) k.qAuto = true;
+      this.pitDrivers.push(d);
+      k.auto = true;
+      k.autoFin = !!fin;
+      k.assist = 1;
+      this.events.push({ type: "auto", k, on: true, why });
+      return true;
+    }
+    autoGive(k, why) {
+      if (!k || !k.auto || !k.own) return;
+      k.auto = k.autoFin = false;
+      k.assist = 0;
+      let i = this.pitDrivers ? this.pitDrivers.findIndex((d) => d.k === k) : -1;
+      if (i >= 0) this.pitDrivers.splice(i, 1);
+      i = this.ai.findIndex((d) => d.k === k);
+      if (i >= 0) this.ai.splice(i, 1);
+      k.input.throttle = k.input.brake = k.input.steer = 0;
+      k.input.boost = false;
+      this.events.push({ type: "auto", k, on: false, why });
+    }
     linkOff() {
       LINK.on = LINK.wantIn = LINK.wantOut = false;
       for (const k of this.karts) k.link = false;
@@ -2677,7 +2801,9 @@ body.touch .keys { display: none; }
       this.linkOff();
       for (const k of this.karts) {
         const sl = this.slotOf(k);
-        k.place(tr, sl.s, sl.d, 0);
+        if (k.auto && k.own) this.autoGive(k, "neu");
+        if (this.state === "pit" && k.set && Math.hypot(k.gx - k.x, k.gz - k.z) < 1.5) k.u = k.v = k.r = 0;
+        else k.place(tr, sl.s, sl.d, 0);
         k.lap = 0;
         k.lapStart = 0;
         k.lapTimes = [];
@@ -6499,8 +6625,8 @@ if (kCoat > 0.01) {
         }
       }
       brake += ((k.brk > 0.08 ? 1 : 0) - brake) * Math.min(1, dt * 18);
-      const tl = 1.8 + brake * 7;
-      tailMat.color.setRGB(tl, tl * 0.035, tl * 0.02);
+      const flash = k.auto ? performance.now() % 700 < 350 ? 2 : 0 : 1, tl = k.auto ? 0.4 + flash * 4.4 : 1.8 + brake * 7;
+      tailMat.color.setRGB(tl, tl * (k.auto ? 0.42 : 0.035), tl * 0.02);
       const boostK = k.boosting ? 1.9 : 1;
       {
         const lit = k.boost > 0.02 ? Math.max(1, Math.round(clamp01(k.boost) * BOOST_N / 2)) : 0, flash = k.boosting ? 1 + ((performance.now() / 70 | 0) & 1) : 0, key = lit + ":" + flash;
@@ -10449,7 +10575,8 @@ void main(){
         const lapT = qq === 1 ? race.pitT - player.qStart : qq === 2 && isFinite(player.qTime) ? player.qTime
           : race.state === "racing" && player.lap >= 1 ? race.time - player.lapStart : race.state === "racing" ? race.time : 0;
         speed = Math.round(Math.abs(player.u) * 3.6);
-        lapL = guide.dash || (!pit ? "RUNDE " + clamp(player.lap, 1, race.laps) + "/" + race.laps : !out ? "AUSLAUFRUNDE" : qq === 0 ? "AUFW\u00c4RMEN" : qq === 1 ? "ZEITRUNDE" : "ZUR STARTBOX");
+        const tol = out ? 0.6 : 0.75;
+        lapL = player.auto ? "AUTOMATIK" : pit && !player.set && player.parkD < 12 ? (player.parkD < tol ? "STOPP" : (out ? "STARTBOX " : "BOX ") + player.parkD.toFixed(1).replace(".", ",") + " m") + (player.nearSaid ? document.body.classList.contains("touch") ? " \u00b7 \u21ba" : " \u00b7 R" : "") : guide.dash || (!pit ? "RUNDE " + clamp(player.lap, 1, race.laps) + "/" + race.laps : !out ? "AUSLAUFRUNDE" : qq === 0 ? "AUFW\u00c4RMEN" : qq === 1 ? "ZEITRUNDE" : "ZUR STARTBOX");
         timeS = fmtTime(Math.max(1e-4, lapT)).slice(0, -2);
         news = hud.newsT > 0 ? hud.newsText : "";
         delta = isFinite(race.liveDelta) && race.state === "racing" ? fmtDelta(race.liveDelta).slice(0, -1) : "";
@@ -10666,7 +10793,7 @@ void main(){
         if (G2.state === "race" || G2.state === "grid" || G2.state === "outlap" || G2.state === "inlap" || G2.state === "foot") setPaused(!G2.paused);
       } else if (G2.state === "inlap" && G2.parked && !$2("results").classList.contains("on") && (e.code === "KeyE" || e.code === "Enter")) getOut();
       else if (G2.state === "foot" && (e.code === "KeyE" || e.code === "Enter" || e.code === "Space")) footAct();
-      else if (e.code === "KeyR") rescue();
+      else if (e.code === "KeyR") autoKey();
       else if (e.code === "KeyJ") nextTrack();
       else if (e.code === "KeyK") nextAhead();
       else if (e.code === "KeyH") nextHud();
@@ -10774,7 +10901,7 @@ void main(){
         if (G2.state === "race" || G2.state === "grid" || G2.state === "outlap" || G2.state === "inlap") setPaused(true);
       });
       $2("t-cam").addEventListener("click", () => cycleCam());
-      $2("t-rescue").addEventListener("click", () => rescue());
+      $2("t-rescue").addEventListener("click", () => autoKey());
     }
     function rumble(strong, weak, ms) {
       try {
@@ -10790,6 +10917,7 @@ void main(){
       }
     }
     let padPrev = {};
+    const autoProbe = { input: { steer: 0, throttle: 0, brake: 0, boost: false, analog: false } };
     function readInput(k) {
       const inp = k.input;
       let steer = (keys.has("KeyA") || keys.has("ArrowLeft") || touch.left ? 1 : 0) - (keys.has("KeyD") || keys.has("ArrowRight") || touch.right ? 1 : 0);
@@ -11525,7 +11653,7 @@ void main(){
     const PH = ["open", "board", "out", "grid", "race", "in"];
     const kartPack = (k) => [N3(hall.now()), N3(k.x), N3(k.z), N3(k.th), N3(k.u), N3(k.v), N3(k.r), N3(k.steer), k.idx | 0, k.lap | 0, N3(k.progress), k.q | 0,
       isFinite(k.qTime) ? N3(k.qTime) : -1, isFinite(k.best) ? N3(k.best) : -1, isFinite(k.last) ? N3(k.last) : -1, k.finished ? N3(k.finishTime) : -1,
-      (k.set ? 1 : 0) | (k.hold ? 2 : 0) | (k.boosting ? 8 : 0), N3(k.thr), N3(k.brk), N3(k.boost), k.lapTimes ? k.lapTimes.length : 0];
+      (k.set ? 1 : 0) | (k.hold ? 2 : 0) | (k.auto ? 4 : 0) | (k.boosting ? 8 : 0), N3(k.thr), N3(k.brk), N3(k.boost), k.lapTimes ? k.lapTimes.length : 0];
     const kartTake = (k, a) => {
       if (!k || k.own || !Array.isArray(a) || a.length < 21) return;
       for (let j = 0; j < 21; j++) if (typeof a[j] !== "number" || !isFinite(a[j])) return;
@@ -11564,6 +11692,7 @@ void main(){
         k.finished = a[15] >= 0;
         k.finishTime = k.finished ? a[15] : NaN;
         k.set = !!(a[16] & 1);
+        k.auto = !!(a[16] & 4);
         k.hold = !!(a[16] & 2);
         k.boosting = !!(a[16] & 8);
         k.thr = a[17];
@@ -12107,6 +12236,7 @@ void main(){
         brief.result = null;
         for (let i = 0; i < race.karts.length; i++) {
           const k = race.karts[i], bb = bay(i);
+          if (Math.hypot(k.x - bb.x, k.z - bb.z) < 1.2 && Math.abs(wrapAngle(k.th - bb.th)) < 0.6) continue;
           k.x = bb.x;
           k.z = bb.z;
           k.th = bb.th;
@@ -12593,6 +12723,14 @@ void main(){
         stick(0, 0);
       });
     }
+    function autoKey() {
+      const k = race.player;
+      if (!k || me.in !== "kart" || G2.paused) return;
+      if (k.auto) {
+        if (!k.autoFin) race.autoGive(k, "hand");
+      } else if (race.state === "pit" && !k.set) race.autoTake(k, "taste");
+      else rescue();
+    }
     function rescue() {
       const k = race.player;
       if (!k || G2.state !== "race" || G2.paused || Math.abs(k.u) > 7) return;
@@ -12648,6 +12786,14 @@ void main(){
         } else if (e.type === "lastlap") {
           hud.message("Letzte Runde", "hot", 2.4);
           if (audio.section !== "drop" && audio.section !== "drop2") audio.goto("lastBuild");
+        } else if (e.type === "park") {
+          if (e.k === race.player) voiceSay("auto_platz", "helm");
+        } else if (e.type === "auto") {
+          if (e.k === race.player) {
+            if (e.on) voiceSay(e.why === "taste" ? "auto_an" : e.why === "frist" ? "auto_frist" : "auto_zwang", "helm", { now: true });
+            else if (e.why === "hand") voiceSay("auto_aus", "helm", { now: true });
+            dash.t = 0;
+          }
         } else if (e.type === "flag") voiceSay("ziel", "halle");
         else if (e.type === "finish") {
           G2.finishT = 0;
@@ -12883,7 +13029,14 @@ void main(){
         if (player && G2.paused) {
           player.input.throttle = player.input.brake = player.input.steer = 0;
           player.input.boost = false;
-        } else if (player && player.human && player.own && own && G2.state !== "menu" && !afoot && !(race.autoPlayer && laps)) readInput(player);
+        } else if (player && player.human && player.own && own && G2.state !== "menu" && !afoot && !(race.autoPlayer && laps)) {
+          if (player.auto) {
+            readInput(autoProbe);
+            const q = autoProbe.input;
+            if (!player.autoFin && (q.throttle > 0.1 || q.brake > 0.1 || Math.abs(q.steer) > 0.2)) race.autoGive(player, "hand");
+          }
+          if (!player.auto) readInput(player);
+        }
         if (!(RUN.phase === "open" && race.state !== "pit")) race.step(dt);
         handleEvents();
         runStep(dt);
