@@ -5,7 +5,7 @@
 <!-- Nachtschicht Grand Prix. (c) 2026. Alle Rechte vorbehalten. Kopieren, Veraendern, Weiterverbreiten und Einbetten nur mit schriftlicher Erlaubnis; siehe LICENSE.txt. -->
 <meta name="robots" content="noindex, nofollow">
 <script>(function(){var ok=["dyson96.github.io"],h=location.hostname,loc=h===""||h==="localhost"||h==="127.0.0.1"||h==="[::1]"||/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(h)||/\.local$/.test(h),own=loc||!ok.length||ok.indexOf(h)>=0,fr=false;try{fr=window.top!==window.self}catch(e){fr=true}if(!own||(fr&&!loc)){window.__LOCK=1;document.write('<meta charset="utf-8"><body style="margin:0;background:#050409;color:#ccd;font:16px/1.5 sans-serif;display:grid;place-items:center;height:100vh;text-align:center"><p>Nachtschicht Grand Prix l\u00e4uft nur auf seiner eigenen Adresse.<br><a style="color:#ff4fa0" href="https://dyson96.github.io/nachtschicht/">Zum Spiel</a></p></body>');document.close();if(window.stop)window.stop();}})();</script>
-<script>window.__BUILD="15.11.2026 13:07";</script>
+<script>window.__BUILD="15.11.2026 13:29";</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -174,6 +174,7 @@ kbd {
 input[type="range"] { width: 100%; accent-color: var(--magenta); height: 28px; margin: 0; }
 input[type="text"] { width: 100%; box-sizing: border-box; height: 38px; margin: 0; padding: 0 12px; border-radius: 9px; border: 1px solid rgba(255,255,255,0.24); background: rgba(255,255,255,0.06); color: #fff; font: inherit; font-weight: 600; outline: none; }
 input[type="text"]:focus { border-color: var(--lime); }
+body.guest #book .p-set .row:not(:first-child) { display: none; }
 .hint { margin: 10px 0 0; font-size: 13px; color: var(--dim); }
 .two { display: flex; gap: 8px; }
 .mute { margin-top: 12px; width: 100%; min-height: 36px; background: transparent; border: 1px solid rgba(241, 238, 252, 0.25); border-radius: 3px; font-size: 14px; }
@@ -2131,6 +2132,9 @@ body.touch .keys { display: none; }
       this.liveDelta = NaN;
       this.acc = 0;
       this.DT = 1 / 300;
+      this.host = true;
+      this.kicks = [];
+      this.fr = 0;
     }
     setup({ opponents = 5, laps = 3, level = 1, demo = false, seed = 1, humans = [0], me = 0 }) {
       var _a2;
@@ -2166,6 +2170,7 @@ body.touch .keys { display: none; }
         k.home = slot;
         k.driver = DRIVERS[i % DRIVERS.length];
         k.human = human;
+        k.own = true;
         k.isPlayer = isPlayer;
         k.lapStart = 0;
         k.lapTimes = [];
@@ -2212,12 +2217,35 @@ body.touch .keys { display: none; }
       const tr = this.track;
       const DT = this.DT;
       this.acc = Math.min(this.acc + frameDt, 0.08);
+      this.fr++;
       for (const k of this.karts) {
         k.impact = 0;
         k.hitWith = null;
         k.kickU = 0;
         k.kickV = 0;
         k.kickR = 0;
+        const q = k.pendK;
+        if (q) {
+          k.pendK = null;
+          if (k.own && !k.hold) {
+            k.u += q[0];
+            k.v += q[1];
+            k.r = clamp(k.r + q[2], -7, 7);
+            k.kickU = q[0];
+            k.kickV = q[1];
+            k.kickR = q[2];
+            if (q[3] > 0) {
+              const c = Math.cos(k.th), sn = Math.sin(k.th), wx = q[0] * c - q[1] * sn, wz = -q[0] * sn - q[1] * c, wl = Math.hypot(wx, wz) || 1;
+              k.impact = q[3];
+              k.impactSide = 0;
+              k.hitWith = this.karts[q[4]] || null;
+              k.hitX = k.x;
+              k.hitZ = k.z;
+              k.hitNX = wx / wl;
+              k.hitNZ = wz / wl;
+            }
+          }
+        }
       }
       while (this.acc >= DT) {
         this.acc -= DT;
@@ -2226,6 +2254,13 @@ body.touch .keys { display: none; }
         if (racing2) this.time += DT;
         for (let i = 0; i < this.karts.length; i++) {
           const k = this.karts[i];
+          if (!k.own) {
+            const c = Math.cos(k.th), sn = Math.sin(k.th);
+            k.x += (k.u * c - k.v * sn) * DT;
+            k.z += (-k.u * sn - k.v * c) * DT;
+            k.th += k.r * DT;
+            continue;
+          }
           if (live && k.hold) continue;
           if (!live) {
             const t = k.input.throttle;
@@ -2242,13 +2277,34 @@ body.touch .keys { display: none; }
         }
         if (live) {
           const ks = this.karts;
-          for (let i = 0; i < ks.length; i++) for (let j = i + 1; j < ks.length; j++) collideKarts(ks[i], ks[j], DT);
+          for (let i = 0; i < ks.length; i++) for (let j = i + 1; j < ks.length; j++) {
+            const A = ks[i], B = ks[j];
+            if (A.own && B.own) collideKarts(A, B, DT);
+            else if (A.own || B.own) {
+              const far = A.own ? B : A, near = A.own ? A : B, u0 = far.kickU, v0 = far.kickV, r0 = far.kickR;
+              const hard = collideKarts(A, B, DT);
+              if (far.kickU !== u0 || far.kickV !== v0 || far.kickR !== r0) {
+                near.met = far.id;
+                near.metF = this.fr;
+                const q = far.sendK || (far.sendK = [0, 0, 0, 0, near.id]);
+                q[0] += far.kickU - u0;
+                q[1] += far.kickV - v0;
+                q[2] += far.kickR - r0;
+                if (hard > q[3]) q[3] = hard;
+                q[4] = near.id;
+              }
+            }
+          }
           for (let i = 0; i < ks.length; i++) {
             ks[i].touched = false;
             if (racing2) this.track_(ks[i]);
             else ks[i].prevS = ks[i].s;
           }
         }
+      }
+      for (const k of this.karts) if (k.sendK) {
+        this.kicks.push([k.id].concat(k.sendK));
+        k.sendK = null;
       }
       if (this.state === "pit") {
         this.pitStep(frameDt);
@@ -2296,6 +2352,9 @@ body.touch .keys { display: none; }
       this.linkOff();
       for (let i = this.ai.length - 1; i >= 0; i--) if (this.ai[i].k.human) this.ai.splice(i, 1);
       this.flagged = false;
+      if (!quali) this.karts.slice().sort((a, b) => (a.human ? 1 : 0) - (b.human ? 1 : 0) || a.slot - b.slot).forEach((k, i) => {
+        k.slot = i;
+      });
       for (const k of this.karts) {
         const p = tr.project(k.x, k.z, k.idx, k._p, tr.N >> 1);
         k.idx = p.i;
@@ -2360,6 +2419,16 @@ body.touch .keys { display: none; }
         d.resetWanted = false;
       }
     }
+    slots() {
+      const tr = this.track;
+      for (const k of this.karts) {
+        const sl = this.slotOf(k), o = tr.at(sl.s, {});
+        k.gs = sl.s;
+        k.gd = sl.d;
+        k.gx = o.x - Math.sin(o.th) * sl.d;
+        k.gz = o.z - Math.cos(o.th) * sl.d;
+      }
+    }
     qualiClose() {
       const tr = this.track;
       for (const k of this.karts) if (k.q < 2) {
@@ -2382,7 +2451,8 @@ body.touch .keys { display: none; }
     }
     pitStep(dt) {
       const tr = this.track, L = tr.L, P = this.player, auto = !!this.autoPlayer, inn = this.pitMode === "in", lz = this.pit.lane, qOn = !!this.quali && !inn;
-      const self = (k) => k.human && !(auto && k === P);
+      const person = (k) => k.human && !(auto && k === P);
+      const self = (k) => person(k) && k.own;
       if (this.pitHold) {
         this.pitT = 0;
         this.pitOut = false;
@@ -2461,7 +2531,7 @@ body.touch .keys { display: none; }
         for (const k of this.karts) {
           const was = k.qS;
           k.qS = k.s;
-          if (k.hold || k.set || k.q > 1 || inPit(k) || !(was > L * 0.75 && k.s < L * 0.25)) continue;
+          if (!k.own || k.hold || k.set || k.q > 1 || inPit(k) || !(was > L * 0.75 && k.s < L * 0.25)) continue;
           const t = this.pitT - dt + dt * (L - was) / Math.max(1e-6, L - was + k.s);
           if (k.q === 0) {
             k.q = 1;
@@ -2471,17 +2541,17 @@ body.touch .keys { display: none; }
             k.qTime = t - k.qStart;
           }
         }
-        if (!this.qDone) {
+        if (this.host && !this.qDone) {
           let close = false, all = true;
           for (const k of this.karts) {
             if (k.q < 2) all = false;
             else if (!inPit(k) && k.s > L - 75 && k.s < L - 30) close = true;
           }
-          const waitP = this.pitT < 300 && this.karts.some((k) => self(k) && !k.set && (k.q === 1 || k.q === 0 && !k.hold && !inPit(k)));
+          const waitP = this.pitT < 300 && this.karts.some((k) => person(k) && !k.set && (k.q === 1 || k.q === 0 && !k.hold && !inPit(k)));
           if (all || close && !waitP || this.pitT > 330) this.qualiClose();
         }
       }
-      if (LINK.n) {
+      if (LINK.n && this.host) {
         const A = LINK;
         let comes = false, hot = false, mouth = false, on = false;
         if (qOn) for (const k of this.karts) {
@@ -2623,6 +2693,11 @@ body.touch .keys { display: none; }
           box(H);
         } else if (this.qDone && Math.hypot(H.gx - H.x, H.gz - H.z) < 1.5 && Math.abs(H.u) < 1.3) box(H);
       }
+      if (!this.host) return;
+      for (const k of this.karts) if (!k.own && !k.set) {
+        allSet = false;
+        if (inPit(k)) lane = true;
+      }
       this.pitOut = !lane;
       if (allSet) {
         if (inn) this.parkedAll = true;
@@ -2693,6 +2768,10 @@ body.touch .keys { display: none; }
     track_(k) {
       const tr = this.track;
       const L = tr.L;
+      if (!k.own) {
+        k.prevS = k.s;
+        return;
+      }
       let ds = k.s - k.prevS;
       if (ds < -L / 2) {
         ds += L;
@@ -8987,9 +9066,13 @@ void main(){
     const fx = new Effects(scene);
     const hud = new Hud(track);
     const race = new Race(track);
-    const hall = { host: true, run: { no: 1, kind: "demo", phase: "race", t: 0, flagT: 0 }, call: "" };
+    const hall = { host: true, run: { no: 1, kind: "demo", phase: "race", t: 0, flagT: 0, wait: 0, lights: null, quiet: false }, call: "",
+      set: { laps: SET.laps, quali: SET.quali, opp: SET.opp, level: SET.level },
+      seats: [0],
+      pit: [0, 0, 0], rec: [SET.rec, SET.recName] };
+    const RELAY = "";
     const RUN = hall.run;
-    const me = { in: "menu", seat: 0, run: 0 };
+    const me = { in: "menu", seat: 0, run: 0, book: 0 };
     status("Karts rollen aus der Box \u2026");
     await nextFrame();
     kartAsset = await loadKartAsset();
@@ -9229,7 +9312,7 @@ void main(){
       }
       if (!crew.on) return;
       for (let i = 0; i < race.karts.length; i++) if (!race.karts[i].human) {
-        const f = crewFigure(i), sp = CREW.brief[(i - 1) % CREW.brief.length];
+        const f = crewFigure(i), sp = CREW.brief[(i + CREW.brief.length - 1) % CREW.brief.length];
         models[i].setDriver(false);
         f.x = sp[0];
         f.z = sp[1];
@@ -9256,7 +9339,7 @@ void main(){
       return x;
     };
     function crewCall(force) {
-      if (!crew.on) return;
+      if (!crew.on || !hall.host) return;
       if (!force) {
         if (crew.called) return;
         for (let i = 0; i < race.karts.length; i++) if (!race.karts[i].human) if (crewFigure(i).state !== "wait") return;
@@ -9282,7 +9365,7 @@ void main(){
       }
     }
     function crewOut(i) {
-      const f = crewFigure(i), k = race.karts[i], side = kartSide(k, 1.05), sp = CREW.store(i - 1);
+      const f = crewFigure(i), k = race.karts[i], side = kartSide(k, 1.05), sp = CREW.store((i + 7) % 8);
       models[i].setDriver(false);
       f.x = k.x - Math.cos(k.th) * 0.2;
       f.z = k.z + Math.sin(k.th) * 0.2;
@@ -9309,15 +9392,25 @@ void main(){
       for (let i = 0; i < race.karts.length; i++) if (!race.karts[i].human && crewFigure(i).state !== "wait") return false;
       return true;
     };
-    const seat = (i) => i === me.seat && race.karts[i] && race.karts[i].human ? { booked: foot.booked || !hallAsset, helm: foot.helm || !hallAsset, sat: me.in === "kart" && me.run === RUN.no, inKart: me.in === "kart", lies: foot.helm ? 1 : foot.back ? 2 : 0 }
-      : { booked: true, helm: true, sat: !crew.on || crewFigure(i).state === "seated", inKart: !crew.on || crewFigure(i).state === "seated", lies: 0 };
+    const holder = (i) => {
+      const id = hall.seats[i];
+      if (i === me.seat) return { name: myName(), booked: (foot.booked && (!net.on || me.book === RUN.no)) || !hallAsset, lies: !hallAsset || foot.helm ? 1 : foot.back ? 2 : 0, inKart: me.in === "kart", run: me.run };
+      const p = id >= 0 ? net.people[id] : null;
+      return p ? { name: p.name, booked: p.b === RUN.no && p.drop !== RUN.no, lies: p.l, inKart: p.k, run: p.r } : null;
+    };
+    const seat = (i) => {
+      const k = race.karts[i], h = k && k.human ? holder(i) : null;
+      if (h) return { booked: h.booked, helm: h.lies === 1, sat: h.inKart && h.run === RUN.no, inKart: h.inKart, lies: h.lies };
+      const sits = !crew.on || crewFigure(i).state === "seated";
+      return { booked: true, helm: true, sat: sits, inKart: sits, lies: 0 };
+    };
     const crewSeated = () => {
       if (!crew.on) return true;
       for (let i = 0; i < race.karts.length; i++) if (!race.karts[i].human) if (crewFigure(i).state !== "seated") return false;
       return true;
     };
     function crewUpdate(dt, time) {
-      if (!crew.on) return;
+      if (!crew.on || !hall.host) return;
       for (let i = 0; i < race.karts.length; i++) if (!race.karts[i].human) {
         const f = crewFigure(i), k = race.karts[i];
         if (f.state === "off" || f.state === "seated") {
@@ -9403,7 +9496,7 @@ void main(){
             for (const i of pod.top) {
               const f = !race.karts[i].human ? crewFigure(i) : null;
               if (!f || f.state !== "podium") continue;
-              crewGo(f, [[f.x, 44.15], [-29, 44.8], [-29, 46.6], [-29 + (i % 3 - 1) * 0.5, 48.4], CREW.store(i - 1)], "wait");
+              crewGo(f, [[f.x, 44.15], [-29, 44.8], [-29, 46.6], [-29 + (i % 3 - 1) * 0.5, 48.4], CREW.store((i + 7) % 8)], "wait");
               f.wait = turn++ * 0.9;
             }
           }
@@ -9464,7 +9557,7 @@ void main(){
         k.human ? seat(i).sat ? "sitzt" : "fehlt noch" : crew.on ? STATE[crewFigure(i).state] || "" : "sitzt", k.driver.color, false]);
       const all = !res && rows.every((r) => r[2] === "sitzt");
       const FONT = SCREEN_FONT;
-      const sig = JSON.stringify([rows, SET.laps, SET.level, SET.quali, !!res, hall.call, guide.step, !!(document.fonts && document.fonts.check('700 30px "Chakra Petch"'))]);
+      const sig = JSON.stringify([rows, hall.set.laps, hall.set.level, hall.set.quali, !!res, hall.call, guide.step, !!(document.fonts && document.fonts.check('700 30px "Chakra Petch"'))]);
       if (sig === brief.sig) return;
       brief.sig = sig;
       const g = brief.ctx;
@@ -9487,7 +9580,7 @@ void main(){
       g.fillStyle = "#8d98ab";
       g.font = "500 24px " + FONT;
       g.textAlign = "right";
-      g.fillText((SET.quali !== "ohne" ? "Zeitfahren · " : "") + SET.laps + " Runden · Niveau " + ["Azubi", "Geselle", "Meister"][SET.level], 1552, 84);
+      g.fillText((hall.set.quali !== "ohne" ? "Zeitfahren · " : "") + hall.set.laps + " Runden · Niveau " + ["Azubi", "Geselle", "Meister"][hall.set.level], 1552, 84);
       g.textAlign = "left";
       const fit = (tx, x, y, wide, px, wt) => {
         for (; px > 14; px--) {
@@ -9496,7 +9589,7 @@ void main(){
         }
         g.fillText(tx, x, y);
       };
-      const steps = SET.quali !== "ohne" ? ["Helm nehmen, ins Kart setzen. Los, wenn alle sitzen.", "Rückwärts aus der Box, durchs Tor auf die Strecke.",
+      const steps = hall.set.quali !== "ohne" ? ["Helm nehmen, ins Kart setzen. Los, wenn alle sitzen.", "Rückwärts aus der Box, durchs Tor auf die Strecke.",
         "Aufwärmen bis zur Linie. Dann zählt eine Runde auf Zeit.", "Danach durch die Abkürzung in deine Startbox. Ampel aus: Start.", "Nach der Zielflagge ausrollen, durchs Tor zurück."]
         : ["Helm nehmen, ins Kart setzen. Los, wenn alle sitzen.", "Rückwärts aus der Box, durchs Tor auf die Strecke.", "Eine Runde bis in deine Startbox. Ampel aus: Start.",
           "Nach der Zielflagge eine Runde ausrollen.", "Durchs Tor zurück, Nase voran auf deinen Platz."];
@@ -9576,7 +9669,7 @@ void main(){
         } else if (guide.brief <= 0 && guide.step < 4) {
           guide.step++;
           guide.brief = BRIEF_STEP;
-          const id = "brief" + (guide.step + 1) + (guide.step > 1 && SET.quali !== "ohne" ? "q" : "");
+          const id = "brief" + (guide.step + 1) + (guide.step > 1 && hall.set.quali !== "ohne" ? "q" : "");
           if (voiceSay(id, "raum", { at: STELE.einweisung, now: true, done: () => { guide.brief = Math.min(guide.brief, 0.4); } })) guide.brief = 14;
         } else if (guide.brief <= 0) guide.step = -1;
       }
@@ -10350,10 +10443,9 @@ void main(){
       t.generateMipmaps = false;
       t.minFilter = THREE.LinearFilter;
       t.flipY = false;
-      models[0].screen.map = t;
-      models[0].screen.color.setRGB(1.1, 1.1, 1.1);
-      models[0].screen.needsUpdate = true;
-      for (let i = 1; i < models.length; i++) {
+      dash.num = [];
+      dash.seat = -9;
+      for (let i = 0; i < models.length; i++) {
         if (!models[i].screen) continue;
         const c2 = document.createElement("canvas");
         c2.width = 128;
@@ -10370,15 +10462,22 @@ void main(){
         const t2 = new THREE.CanvasTexture(c2);
         t2.encoding = THREE.sRGBEncoding;
         t2.flipY = false;
-        models[i].screen.map = t2;
-        models[i].screen.color.setRGB(1, 1, 1);
-        models[i].screen.needsUpdate = true;
+        dash.num[i] = t2;
       }
     }
     function dashUpdate(dt) {
       if (!dash.made) dashInit();
       const g = dash.ctx, player = race.player;
       if (!g) return;
+      if (dash.seat !== me.seat) {
+        dash.seat = me.seat;
+        for (let i = 0; i < models.length; i++) if (models[i].screen) {
+          const mine = i === me.seat, v = mine ? 1.1 : 1;
+          models[i].screen.map = mine ? dash.tex : dash.num[i];
+          models[i].screen.color.setRGB(v, v, v);
+          models[i].screen.needsUpdate = true;
+        }
+      }
       dash.t -= dt;
       if (dash.t > 0) return;
       dash.t = G2.camMode === 1 ? 0.1 : 0.5;
@@ -10465,7 +10564,7 @@ void main(){
     function boardDraw() {
       const W = 1200, H = 537, FONT = SCREEN_FONT, g = brief.board.ctx;
       const day = Object.keys(brief.day).map((n) => [n, brief.day[n]]).sort((a, b) => a[1] - b[1]).slice(0, 8);
-      const sig = JSON.stringify([brief.last, day, SET.rec, SET.recName, SET.laps, SET.opp, hall.call, !!(document.fonts && document.fonts.check('700 30px "Chakra Petch"'))]);
+      const sig = JSON.stringify([brief.last, day, hall.rec, hall.set.laps, hall.set.opp, hall.call, !!(document.fonts && document.fonts.check('700 30px "Chakra Petch"'))]);
       if (sig === brief.bsig) return;
       brief.bsig = sig;
       g.setTransform(g.canvas.width / W, 0, 0, g.canvas.height / H, 0, 0);
@@ -10490,7 +10589,7 @@ void main(){
         g.fillStyle = "#ff2e88";
         g.font = "700 34px " + FONT;
         g.fillText(hall.call, 1164, 76, 700);
-      } else g.fillText("N\u00e4chster Lauf: " + SET.laps + " Runden \u00b7 " + (SET.opp + 1) + " Fahrer", 1164, 74);
+      } else g.fillText("N\u00e4chster Lauf: " + hall.set.laps + " Runden \u00b7 " + (hall.set.opp + 1) + " Fahrer", 1164, 74);
       const col = (x, title, rows, none) => {
         g.textAlign = "left";
         g.fillStyle = "#ff2e88";
@@ -10517,7 +10616,7 @@ void main(){
       g.textAlign = "left";
       g.fillStyle = "#8d98ab";
       g.font = "500 26px " + FONT;
-      g.fillText("Bahnrekord: " + (SET.rec > 0 ? fmtTime(SET.rec) + " \xB7 " + SET.recName : "noch keiner"), 36, H - 30);
+      g.fillText("Bahnrekord: " + (hall.rec[0] > 0 ? fmtTime(hall.rec[0]) + " \xB7 " + hall.rec[1] : "noch keiner"), 36, H - 30);
       brief.board.tex.needsUpdate = true;
     }
     const G2 = {
@@ -10780,6 +10879,8 @@ void main(){
       for (let i = 0; i < race.karts.length; i++) models[i].kart = race.karts[i];
     }
     function attract() {
+      netLeave();
+      me.seat = 0;
       setGhost(false);
       me.in = "menu";
       RUN.kind = "demo";
@@ -10810,6 +10911,14 @@ void main(){
       foot.helm = foot.back = false;
       document.body.classList.remove("racing");
       refreshBest();
+      if (net.lost) {
+        const el = $2("note");
+        el.textContent = net.lost;
+        el.classList.add("on");
+        clearTimeout(noteTimer);
+        noteTimer = setTimeout(() => el.classList.remove("on"), 7000);
+        net.lost = "";
+      }
     }
     let wake = null;
     function immerse() {
@@ -10981,7 +11090,7 @@ void main(){
         ghost.drag = false;
         ghost.held = (G2.state === "race" || G2.state === "grid" || G2.state === "outlap" || G2.state === "inlap") && !G2.paused;
         if (ghost.held) setPaused(true);
-        models[me.seat].setOnboard(false);
+        (models[me.seat] || models[0]).setOnboard(false);
         const u = post.mOut.uniforms;
         u.uSpeed.value = 0;
         ghostSpeed(ghost.speed);
@@ -11080,6 +11189,11 @@ void main(){
       race.setup({ opponents: SET.opp, laps: SET.laps, level: SET.level, demo: false, seed: 1 + Math.floor(Math.random() * 1e3) });
       race.player.assist = 0;
       nameKarts();
+      {
+        const old = hall.seats;
+        hall.seats = race.karts.map((k, i) => i === me.seat ? net.id : old[i] > 0 && net.people[old[i]] ? old[i] : -1);
+        for (const id in net.people) if (net.people[id].seat >= race.karts.length) net.people[id].seat = -1;
+      }
       for (let i = 0; i < race.karts.length; i++) {
         const k = race.karts[i], b = bay(i);
         k.x = b.x;
@@ -11153,6 +11267,7 @@ void main(){
       cam.init = false;
       canvas.focus();
       saveSettings();
+      netOpen();
     }
     function footHint() {
       const el = $2("w-hint"), act = $2("w-act");
@@ -11260,19 +11375,21 @@ void main(){
       const S = [], C = [];
       for (let b = 0; b < 8; b++) C.push(null);
       for (let i = 0; i < 8; i++) {
-        const k = i < n ? ks[i] : null, q = k ? seat(i) : null, lies = k && k.human ? q.lies : 0, named = !!k && k.human && q.booked;
-        S.push([k ? hexOf(k.driver.color) : "", named ? k.driver.name : ""]);
+        const k = i < n ? ks[i] : null, q = k ? seat(i) : null, h = k ? holder(i) : null;
+        const lies = h ? h.lies : 0, named = !!h && (h.booked || lies !== 0);
+        S.push([k ? hexOf(k.driver.color) : "", named ? h.name : ""]);
         gear.helm[i].visible = lies === 0;
         gear.back[i].visible = lies === 2;
-        const free = !!k && k.human && q.booked, no = gear.deny === i && gear.denyT > 0 && (guide.t * 6 | 0) % 2 === 0;
-        const a = free && lies === 0 ? 1 : 0, r = free && lies === 2 ? 1 : !!k && k.human && !q.booked && lies === 1 && !q.inKart ? 0.6 : 0;
+        const free = !!h && h.booked, no = gear.deny === i && gear.denyT > 0 && (guide.t * 6 | 0) % 2 === 0;
+        const a = free && lies === 0 ? 1 : 0, r = free && lies === 2 ? 1 : !!h && !h.booked && lies === 1 && !h.inKart ? 0.6 : 0;
         const dimA = named ? 0.62 : 0.3, dimR = lies === 2 ? 0.62 : 0.3;
         gear.lab[i].material.color.setRGB(no ? 3.2 : a ? 0.45 + 0.5 * beat : dimA, no ? 0.25 : a ? 0.7 + 1.9 * beat : dimA, no ? 0.15 : a ? 0.4 + 0.35 * beat : dimA);
         gear.rk[i].material.color.setRGB(r ? 0.45 + 0.5 * beat * r : dimR, r ? 0.7 + 1.9 * beat * r : dimR, r ? 0.4 + 0.35 * beat * r : dimR);
         if (k) {
-          const b = 7 - k.home % 8;
-          const st = k.human && !q.booked ? "FREI" : ph === "open" ? "ANGEMELDET" : ph === "board" ? q.sat ? "BEREIT" : "FAHRER FEHLT" : ph === "in" ? k.set ? "L\xC4DT" : "KOMMT REIN" : "AUF DER BAHN";
-          C[b] = [String(i + 1), hexOf(k.driver.color), !k.human || q.booked ? k.driver.name : "", st];
+          const b = 7 - k.home % 8, open = ph === "open";
+          const who = open ? h ? h.booked ? h.name : "" : k.driver.name : k.human && h ? h.name : k.driver.name;
+          const st = open ? h && !h.booked ? "FREI" : "ANGEMELDET" : ph === "board" ? q.sat ? "BEREIT" : "FAHRER FEHLT" : ph === "in" ? k.set ? "L\xC4DT" : "KOMMT REIN" : "AUF DER BAHN";
+          C[b] = [String(i + 1), hexOf(k.driver.color), who, st];
         }
       }
       for (let b = 0; b < 8; b++) {
@@ -11336,6 +11453,7 @@ void main(){
       footHint();
     }
     function deskOpen() {
+      document.body.classList.toggle("guest", net.on && !hall.host);
       foot.desk = { opp: SET.opp, level: SET.level };
       $2("b-name").value = SET.name;
       foot.vx = foot.vz = 0;
@@ -11389,6 +11507,7 @@ void main(){
         return;
       }
       if (hallAsset && (!foot.helm || !foot.booked)) return;
+      if (net.on && !(race.player && me.book === RUN.no && (hall.host ? RUN.phase === "open" || RUN.phase === "board" : RUN.phase === "board" && race.player.human))) return;
       runHurry();
       foot.busy = 1e-3;
       footHint();
@@ -11397,6 +11516,7 @@ void main(){
       const pt = SITE.pit, g = pt.gates, sol = pt.solids.slice();
       sol.push(entryOpen ? [g[0][0], pt.z0, g[0][0] + 0.5, 39.6] : [g[0][0], pt.z0, g[0][1], pt.z0 + 1]);
       sol.push(exitOpen ? [g[1][1] - 0.5, pt.z0, g[1][1], 39.6] : [g[1][0], pt.z0, g[1][1], pt.z0 + 1]);
+      hall.pit = [on ? 1 : 0, exitOpen ? 1 : 0, entryOpen ? 1 : 0];
       PIT.open = !!on && !!hallAsset;
       PIT.zone = [g[0][0], pt.z0, g[1][1], 44.4];
       PIT.solids = sol;
@@ -11417,11 +11537,527 @@ void main(){
       slotMark.visible = false;
       scene.add(slotMark);
     }
+    const NQ = new URLSearchParams(location.search);
+    const net = {
+      url: NQ.get("relay") || RELAY, code: cleanName(NQ.get("halle") || "").toUpperCase().replace(/[^A-Z0-9]/g, ""),
+      ws: null, on: false, id: 0, hostId: 0, off: 0, rtt: 1e9, pingT: 0, cT: 0, hT: 0, got: 0, people: {}, sigF: "", sigS: "", lost: ""
+    };
+    hall.now = () => performance.now() / 1e3 + net.off;
+    const N3 = (v) => typeof v === "number" && isFinite(v) ? Math.round(v * 1e3) / 1e3 : 0;
+    const num = (v) => typeof v === "number" && isFinite(v) ? v : 0;
+    const PH = ["open", "board", "out", "grid", "race", "in"];
+    const kartPack = (k) => [N3(hall.now()), N3(k.x), N3(k.z), N3(k.th), N3(k.u), N3(k.v), N3(k.r), N3(k.steer), k.idx | 0, k.lap | 0, N3(k.progress), k.q | 0,
+      isFinite(k.qTime) ? N3(k.qTime) : -1, isFinite(k.best) ? N3(k.best) : -1, isFinite(k.last) ? N3(k.last) : -1, k.finished ? N3(k.finishTime) : -1,
+      (k.set ? 1 : 0) | (k.hold ? 2 : 0) | (k.boosting ? 8 : 0), N3(k.thr), N3(k.brk), N3(k.boost), k.lapTimes ? k.lapTimes.length : 0];
+    const kartTake = (k, a) => {
+      if (!k || k.own || !Array.isArray(a) || a.length < 21) return;
+      for (let j = 0; j < 21; j++) if (typeof a[j] !== "number" || !isFinite(a[j])) return;
+      if (!k.net || a[0] > k.net[0] || a[0] < k.net[0] - 2) k.net = a;
+    };
+    function netKarts(dt) {
+      const now = hall.now();
+      for (const k of race.karts) {
+        const a = k.net;
+        if (k.own || !a) continue;
+        const age = clamp(now - a[0], 0, 0.25), c = Math.cos(a[3]), sn = Math.sin(a[3]);
+        const tx = a[1] + (a[4] * c - a[5] * sn) * age, tz = a[2] + (-a[4] * sn - a[5] * c) * age, tth = a[3] + a[6] * age;
+        const far = Math.hypot(tx - k.x, tz - k.z) > 3.5, w = far ? 1 : 1 - Math.exp(-dt / 0.09);
+        const kept = k.keepT > 0 && a[0] < k.keepT && now < k.keepT + 0.4;
+        if (!kept) {
+          k.x += (tx - k.x) * w;
+          k.z += (tz - k.z) * w;
+          k.th += wrapAngle(tth - k.th) * w;
+          k.u = a[4];
+          k.v = a[5];
+          k.r = a[6];
+          if (far) k.idx = a[8];
+        }
+        k.steer = a[7];
+        k.sync(track);
+        k.lap = a[9];
+        k.progress = a[10] + a[4] * age;
+        k.q = a[11];
+        k.qTime = a[12] < 0 ? Infinity : a[12];
+        k.best = a[13] < 0 ? Infinity : a[13];
+        k.last = a[14] < 0 ? NaN : a[14];
+        k.finished = a[15] >= 0;
+        k.finishTime = k.finished ? a[15] : NaN;
+        k.set = !!(a[16] & 1);
+        k.hold = !!(a[16] & 2);
+        k.boosting = !!(a[16] & 8);
+        k.thr = a[17];
+        k.brk = a[18];
+        k.boost = a[19];
+        if (!k.lapTimes) k.lapTimes = [];
+        if (k.lapTimes.length > a[20]) k.lapTimes.length = a[20];
+        while (k.lapTimes.length < a[20] && isFinite(k.last)) k.lapTimes.push(k.last);
+        if (hall.host && k.finished && !race.flagged && (race.state === "racing" || race.state === "finished")) {
+          race.flagged = true;
+          race.events.push({ type: "flag", k });
+        }
+      }
+    }
+    function netKick(d) {
+      const k = race.karts[d.s | 0], a = d.a, by = d.by | 0;
+      if (!k || !k.own || !Array.isArray(a) || a.length < 4) return;
+      if (k.met === by && race.fr - (k.metF | 0) < 10) return;
+      const q = k.pendK || (k.pendK = [0, 0, 0, 0, by]);
+      q[0] = clamp(q[0] + num(a[0]), -15, 15);
+      q[1] = clamp(q[1] + num(a[1]), -15, 15);
+      q[2] = clamp(q[2] + num(a[2]), -7, 7);
+      q[3] = Math.max(q[3], clamp(num(a[3]), 0, 30));
+      q[4] = by;
+    }
+    const netSay = (o) => {
+      if (net.ws && net.ws.readyState === 1) try {
+        net.ws.send(JSON.stringify(o));
+      } catch (e) {
+      }
+    };
+    function netOpen() {
+      if (net.ws || !net.url || !net.code || !hallAsset) return;
+      let ws;
+      try {
+        ws = new WebSocket(net.url + (net.url.indexOf("?") < 0 ? "?" : "&") + "halle=" + encodeURIComponent(net.code));
+      } catch (e) {
+        return;
+      }
+      net.ws = ws;
+      ws.onmessage = (ev) => {
+        let m;
+        try {
+          m = JSON.parse(ev.data);
+        } catch (e) {
+          return;
+        }
+        if (m && typeof m === "object") netGot(m);
+      };
+      ws.onclose = () => netShut(ws);
+    }
+    function netShut(ws) {
+      if (ws && ws !== net.ws) return;
+      const was = net.on, guest = was && !hall.host;
+      net.ws = null;
+      net.on = false;
+      for (const id in net.people) netGone(+id);
+      if (guest) {
+        net.lost = "Verbindung zur Halle verloren.";
+        hall.host = race.host = true;
+        attract();
+      }
+    }
+    function netLeave() {
+      const ws = net.ws;
+      net.ws = null;
+      net.on = false;
+      for (const id in net.people) netGone(+id);
+      hall.host = race.host = true;
+      net.id = net.hostId = 0;
+      net.off = 0;
+      net.rtt = 1e9;
+      net.sigF = net.sigS = "";
+      if (ws) try {
+        ws.onclose = null;
+        ws.close();
+      } catch (e) {
+      }
+    }
+    function netGot(m) {
+      if (m.t === "hi") {
+        net.id = m.id | 0;
+        net.hostId = m.host | 0;
+        net.on = true;
+        net.got = performance.now();
+        const host = net.id === net.hostId;
+        hall.host = race.host = host;
+        if (host) hall.seats[me.seat] = net.id;
+        else {
+          me.seat = -1;
+          net.sigF = net.sigS = "";
+        }
+      } else if (m.t === "left") {
+        netGone(m.id | 0);
+        if ((m.host | 0) !== net.hostId) {
+          net.lost = "Der Gastgeber hat die Halle verlassen.";
+          attract();
+        }
+      } else if (m.f && m.m && typeof m.m === "object") {
+        const f = m.f | 0, d = m.m;
+        if (d.t === "c") netPerson(f, d);
+        else if (d.t === "k") netKick(d);
+        else if (d.t === "h" && f === net.hostId && !hall.host) netHall(d);
+        else if (d.t === "ping" && hall.host) netSay({ t: "pong", to: f, c: d.c, h: hall.now() });
+        else if (d.t === "pong" && d.to === net.id && f === net.hostId) {
+          const now = performance.now() / 1e3, rtt = now - num(d.c);
+          if (rtt >= 0 && rtt < net.rtt + 0.02) {
+            if (rtt < net.rtt) net.rtt = rtt;
+            net.off = num(d.h) + rtt / 2 - now;
+          }
+        }
+      }
+    }
+    function netPerson(id, d) {
+      const p = net.people[id] || (net.people[id] = { id, seat: -1, fig: null, figI: -9, x: 0, z: 0, y: 0, yaw: 0, v: 0, tx: 0, tz: 0, first: true });
+      p.name = cleanName(d.n) || "Gast";
+      p.b = d.b | 0;
+      p.l = d.l | 0;
+      p.k = !!d.k;
+      p.r = d.r | 0;
+      p.at = performance.now();
+      if (Array.isArray(d.f) && d.f.length >= 5) {
+        p.tx = num(d.f[0]);
+        p.tz = num(d.f[1]);
+        p.y = num(d.f[2]);
+        p.yaw = num(d.f[3]);
+        p.v = clamp(num(d.f[4]), 0, 6);
+        if (p.first) p.x = p.tx, p.z = p.tz, p.first = false;
+      }
+      if (p.seat >= 0 && d.K) kartTake(race.karts[p.seat], d.K);
+    }
+    function netGone(id) {
+      const p = net.people[id];
+      if (!p) return;
+      if (p.fig) crewShow(p.fig, false);
+      delete net.people[id];
+      if (hall.host) for (let i = 0; i < hall.seats.length; i++) if (hall.seats[i] === id) seatFree(i);
+    }
+    function seatFree(i) {
+      const k = race.karts[i];
+      hall.seats[i] = -1;
+      if (!k) return;
+      k.net = null;
+      k.own = true;
+      if (k.human) {
+        k.human = false;
+        k.driver = DRIVERS[i % DRIVERS.length];
+        botFor(k);
+        if (race.state === "pit" || race.state === "racing" || race.state === "finished") botJoin(k);
+        if (crew.on) {
+          const f = crewFigure(i), out = RUN.phase !== "open" && RUN.phase !== "board";
+          f.state = out ? "seated" : "wait";
+          models[i].setDriver(out);
+          crewShow(f, !out);
+        }
+      }
+    }
+    function botFor(k) {
+      let d = race.ai.find((q) => q.k === k);
+      if (!d) {
+        d = new AIDriver(k, track, race.vref, { skill: LEVELS[SET.level].skill, seed: 77 + k.id * 31 });
+        k.assist = 1;
+        race.ai.push(d);
+      }
+      return d;
+    }
+    function botJoin(k) {
+      const d = botFor(k);
+      if (race.state === "pit") {
+        if (!race.pitDrivers.includes(d)) race.pitDrivers.push(d);
+        d.mode = race.pitMode === "in" ? "lapin" : k.hold ? "bay" : "lap";
+        d.release = 0;
+        d.capV = race.pitMode === "in" ? 14 : 17;
+        d.pi = 0;
+        d.idle = 0;
+        d.bias = null;
+        d.phase = "drive";
+        d.stuck = 0;
+        d.resetWanted = false;
+      } else d.launch = 0;
+    }
+    function seatsDecide() {
+      if (RUN.kind !== "visit" || RUN.phase !== "open") return;
+      for (const id in net.people) {
+        const p = net.people[id];
+        if (p.seat >= 0 || p.b !== RUN.no) continue;
+        let i = 0;
+        while (i < race.karts.length && hall.seats[i] >= 0) i++;
+        if (i >= race.karts.length) continue;
+        hall.seats[i] = +id;
+        p.seat = i;
+      }
+    }
+    function seatsCall() {
+      for (let i = 0; i < race.karts.length; i++) {
+        const k = race.karts[i], id = hall.seats[i], p = id >= 0 && id !== net.id ? net.people[id] : null;
+        const human = i === me.seat ? foot.booked || !hallAsset : !!p && p.b === RUN.no;
+        if (p) p.seat = i;
+        k.isPlayer = i === me.seat && human;
+        if (human) {
+          k.human = true;
+          k.own = i === me.seat;
+          k.driver = Object.assign({}, DRIVERS[i % DRIVERS.length], { name: i === me.seat ? myName() : p.name });
+          if (crew.on && crew.list[i]) {
+            crewShow(crew.list[i], false);
+            crew.list[i].state = "off";
+          }
+        } else {
+          const was = k.human;
+          k.human = false;
+          k.own = true;
+          k.net = null;
+          k.driver = DRIVERS[i % DRIVERS.length];
+          botFor(k);
+          if (was && crew.on) {
+            const f = crewFigure(i), sp = CREW.brief[(i + CREW.brief.length - 1) % CREW.brief.length];
+            f.x = sp[0];
+            f.z = sp[1];
+            f.y = 0;
+            f.v = f.crouch = 0;
+            f.state = "wait";
+            f.path = null;
+            models[i].setDriver(false);
+            crewShow(f, true);
+          }
+        }
+      }
+    }
+    function hallPack() {
+      const ks = race.karts, K = {}, F = {};
+      for (let i = 0; i < ks.length; i++) {
+        const k = ks[i];
+        if (k.own && !(i === me.seat && k.human)) K[i] = kartPack(k);
+        if (!k.human && crew.on) {
+          const f = crewFigure(i);
+          F[i] = [N3(f.x), N3(f.z), N3(f.y), N3(f.th), N3(f.v), N3(f.crouch), f.state];
+        }
+      }
+      return {
+        t: "h", no: RUN.no, ph: PH.indexOf(RUN.phase), set: [SET.laps, SET.quali === "ohne" ? 0 : 1, SET.opp, SET.level],
+        seats: hall.seats.slice(0, ks.length), names: ks.map((k) => k.driver.name), hum: ks.map((k) => k.human ? 1 : 0), home: ks.map((k) => k.home), slot: ks.map((k) => k.slot),
+        r: [race.pitHold ? 1 : 0, race.qDone ? 1 : 0, race.formed ? 1 : 0, race.parkedAll ? 1 : 0, race.pitOut ? 1 : 0, race.entryOpen ? 1 : 0, race.flagged ? 1 : 0, race.quali ? 1 : 0],
+        pit: hall.pit, link: [LINK.wantIn ? 1 : 0, LINK.wantOut ? 1 : 0, LINK.on ? 1 : 0], fin: race.final || null, go: RUN.lights || null,
+        w: N3(RUN.wait), pod: crew.pod ? [crew.pod.phase, crew.pod.top] : null, br: [guide.brief > 0 ? 1 : 0, guide.step], day: brief.day, rec: [SET.rec, SET.recName], K, F
+      };
+    }
+    function netHall(H) {
+      if (!Array.isArray(H.hum) || !Array.isArray(H.seats) || !Array.isArray(H.set) || !Array.isArray(H.r) || !Array.isArray(H.home) || !Array.isArray(H.slot) || !Array.isArray(H.names)) return;
+      const n = H.hum.length, mine = H.seats.indexOf(net.id);
+      if (n < 2 || n > 8 || H.seats.length !== n || H.home.length !== n || H.slot.length !== n || H.names.length !== n) return;
+      net.hT = performance.now();
+      hall.set.laps = [3, 5, 8].includes(H.set[0]) ? H.set[0] : 3;
+      hall.set.quali = H.set[1] ? "mit" : "ohne";
+      hall.set.opp = n - 1;
+      hall.set.level = clamp(H.set[3] | 0, 0, 2);
+      const sigF = JSON.stringify([n, H.hum, H.seats, H.home, mine]);
+      if (sigF !== net.sigF) {
+        const fresh = race.karts.length !== n || !net.sigF;
+        if (me.in === "kart" && race.player && (mine < 0 || !H.hum[mine] || fresh)) getOut();
+        if (fresh) {
+          race.setup({ opponents: n - 1, laps: hall.set.laps, level: hall.set.level, demo: false, seed: 7, humans: [], me: -1 });
+          for (let i = 0; i < n; i++) {
+            const k = race.karts[i];
+            k.home = H.home[i] | 0;
+          }
+          for (let i = 0; i < n; i++) {
+            const k = race.karts[i], b = bay(i);
+            k.x = b.x;
+            k.z = b.z;
+            k.th = b.th;
+            k.y = 0;
+            k.pitch = k.roll = k.u = k.v = k.r = k.steer = k.ax = k.ay = 0;
+          }
+          showKarts();
+          crewInit();
+          RUN.phase = "open";
+          setPit(false, false, false);
+        }
+        race.ai.length = 0;
+        if (race.pitDrivers) race.pitDrivers.length = 0;
+        race.host = false;
+        me.seat = mine;
+        race.player = mine >= 0 ? race.karts[mine] : null;
+        hall.seats = H.seats.slice();
+        for (let i = 0; i < n; i++) {
+          const k = race.karts[i], human = !!H.hum[i];
+          k.human = human;
+          k.isPlayer = i === mine && human;
+          k.own = i === mine && human;
+          k.assist = k.own ? 0 : 1;
+          if (k.own) k.net = null;
+          if (human && crew.list[i]) {
+            crewShow(crew.list[i], false);
+            crew.list[i].state = "off";
+          }
+        }
+        for (const id in net.people) {
+          const p = net.people[id];
+          p.seat = H.seats.indexOf(+id);
+        }
+        net.sigF = sigF;
+      }
+      for (let i = 0; i < n; i++) {
+        const k = race.karts[i], nm = cleanName(H.names[i]) || "Gast";
+        if (k.driver.name !== nm) k.driver = Object.assign({}, DRIVERS[i % DRIVERS.length], { name: nm });
+      }
+      const sigS = H.slot.join();
+      if (sigS !== net.sigS) {
+        net.sigS = sigS;
+        for (let i = 0; i < n; i++) race.karts[i].slot = H.slot[i] | 0;
+        race.slots();
+        if (race.state !== "racing" && race.state !== "finished") race.order = race.karts.slice().sort((a, b) => a.slot - b.slot);
+      }
+      const want = PH[H.ph | 0] || "open", no = H.no | 0;
+      if (Array.isArray(H.fin) && H.fin.length === n) race.final = H.fin.slice();
+      if (mine >= 0 && foot.booked && me.book === no && want !== "open" && !H.hum[mine] && me.in !== "kart") {
+        foot.booked = false;
+        me.book = 0;
+        note("Lauf " + no + " f\xE4hrt ohne dich. Melde dich f\xFCr den n\xE4chsten an.");
+      }
+      let guard = 0;
+      RUN.quiet = (RUN.no !== no ? 6 : 0) + PH.indexOf(want) - PH.indexOf(RUN.phase) > 1;
+      const ahead = RUN.no === no && RUN.phase === "race" && want === "grid";
+      while (!ahead && (RUN.no !== no || RUN.phase !== want) && guard++ < 14) {
+        const at = PH.indexOf(RUN.phase);
+        if (RUN.phase === "in" || RUN.no > no) {
+          RUN.no = RUN.phase === "in" && RUN.no < no ? RUN.no + 1 : no;
+          runSet("open");
+        } else if (RUN.phase === "grid") {
+          race.go();
+          runSet("race");
+        } else runSet(PH[at + 1]);
+      }
+      RUN.quiet = false;
+      if (RUN.phase === "open") RUN.wait = num(H.w);
+      if (race.state === "pit") {
+        race.pitHold = !!H.r[0];
+        race.qDone = !!H.r[1];
+        race.formed = !!H.r[2];
+        race.parkedAll = !!H.r[3];
+        race.pitOut = !!H.r[4];
+        race.entryOpen = !!H.r[5];
+      }
+      if (H.r[6] && !race.flagged && (race.state === "racing" || race.state === "finished")) {
+        race.flagged = true;
+        race.events.push({ type: "flag" });
+      }
+      if (Array.isArray(H.pit) && (H.pit[0] !== hall.pit[0] || H.pit[1] !== hall.pit[1] || H.pit[2] !== hall.pit[2])) setPit(!!H.pit[0], !!H.pit[1], !!H.pit[2]);
+      if (Array.isArray(H.link)) {
+        LINK.wantIn = !!H.link[0];
+        LINK.wantOut = !!H.link[1];
+        LINK.on = !!H.link[2];
+      }
+      RUN.lights = Array.isArray(H.go) && H.go.length === 2 ? [num(H.go[0]), num(H.go[1])] : null;
+      if (H.K && typeof H.K === "object") for (const i in H.K) kartTake(race.karts[i | 0], H.K[i]);
+      net.F = H.F && typeof H.F === "object" ? H.F : null;
+      if (Array.isArray(H.pod) && Array.isArray(H.pod[1])) crew.pod = { phase: String(H.pod[0]), t: 0, end: 1e9, up: true, top: H.pod[1].map((v) => v | 0) };
+      else crew.pod = null;
+      if (Array.isArray(H.br)) {
+        if (H.br[0] && guide.brief <= 0 && guide.step !== (H.br[1] | 0)) {
+          guide.step = (H.br[1] | 0) - 1;
+          guide.brief = 1e-3;
+        }
+      }
+      if (H.day && typeof H.day === "object") {
+        const day = {};
+        let c = 0;
+        for (const nm in H.day) if (c++ < 16 && typeof H.day[nm] === "number") day[cleanName(nm) || "Gast"] = H.day[nm];
+        brief.day = day;
+      }
+      if (Array.isArray(H.rec)) hall.rec = [num(H.rec[0]), cleanName(H.rec[1])];
+    }
+    function netFigures(dt, time) {
+      for (const id in net.people) {
+        const p = net.people[id], k = p.seat >= 0 ? race.karts[p.seat] : null, sits = p.k && !!k;
+        const fi = p.seat >= 0 ? p.seat : (+id * 3 + 5) % models.length;
+        if (p.figI !== fi) {
+          if (p.fig) crewShow(p.fig, false);
+          p.fig = netFigure(fi);
+          p.figI = fi;
+        }
+        const f = p.fig;
+        if (k && k.human) models[p.seat].setDriver(sits);
+        crewShow(f, !sits);
+        if (sits) continue;
+        const w = 1 - Math.exp(-dt / 0.1), dx = p.tx - p.x, dz = p.tz - p.z, far = Math.hypot(dx, dz) > 4;
+        p.x += dx * (far ? 1 : w);
+        p.z += dz * (far ? 1 : w);
+        f.x = p.x;
+        f.z = p.z;
+        f.y = p.y;
+        f.th += wrapAngle(p.yaw - Math.PI / 2 - f.th) * Math.min(1, dt * 10);
+        f.v = p.v;
+        f.crouch = 0;
+        f.phase += p.v * dt * (TAU / 1.45);
+        f.helm.visible = p.l === 1;
+        f.head.visible = p.l !== 1;
+        poseFigure(f, dt, time);
+      }
+      if (hall.host || !net.F || !crew.on) return;
+      for (let i = 0; i < race.karts.length; i++) if (!race.karts[i].human) {
+        const a = net.F[i], f = crewFigure(i);
+        if (!Array.isArray(a) || a.length < 7) continue;
+        const st = String(a[6]), sits = st === "seated", off = st === "off";
+        if (f.state !== st) {
+          f.state = st;
+          models[i].setDriver(sits);
+          crewShow(f, !sits && !off);
+        }
+        if (sits || off) continue;
+        const w = 1 - Math.exp(-dt / 0.1), tx = num(a[0]), tz = num(a[1]), far = Math.hypot(tx - f.x, tz - f.z) > 4 ? 1 : w;
+        f.x += (tx - f.x) * far;
+        f.z += (tz - f.z) * far;
+        f.y = num(a[2]);
+        f.th += wrapAngle(num(a[3]) - f.th) * Math.min(1, dt * 12);
+        f.v = num(a[4]);
+        f.crouch = num(a[5]);
+        f.phase += f.v * dt * (TAU / 1.45);
+        poseFigure(f, dt, time);
+      }
+    }
+    function netFigure(i) {
+      const f = makeFigure(i), b2 = f.bones[2];
+      f.helm = b2.children[b2.children.length - 1];
+      const trim = f.helm.children[f.helm.children.length - 1].material;
+      const head = new THREE.Mesh(new THREE.SphereGeometry(0.108, 18, 14), trim);
+      head.scale.set(0.92, 1.12, 1);
+      head.position.set(0, 0.105, 0);
+      b2.add(head);
+      f.head = head;
+      head.visible = false;
+      return f;
+    }
+    function netStep(dt, time) {
+      if (!net.on) return;
+      const now = performance.now();
+      if (race.kicks.length) {
+        for (const q of race.kicks) {
+          netSay({ t: "k", s: q[0], a: [N3(q[1]), N3(q[2]), N3(q[3]), N3(q[4])], by: q[5] });
+          if (race.karts[q[0]]) race.karts[q[0]].keepT = hall.now() + (net.rtt < 1 ? Math.min(0.3, net.rtt * 1.5 + 0.08) : 0.14);
+        }
+        race.kicks.length = 0;
+      }
+      if (hall.host) seatsDecide();
+      net.cT -= dt;
+      if (net.cT <= 0) {
+        net.cT = 0.05;
+        const k = me.seat >= 0 ? race.karts[me.seat] : null, sp = Math.hypot(foot.vx, foot.vz);
+        const c = { t: "c", n: myName(), b: foot.booked ? me.book | 0 : 0, l: foot.helm ? 1 : foot.back ? 2 : 0, k: me.in === "kart" ? 1 : 0, r: me.run, f: [N3(foot.x), N3(foot.z), N3(foot.y), N3(foot.yaw), N3(sp)] };
+        if (k && k.own && k.human && (hall.host || net.rtt < 9)) c.K = kartPack(k);
+        netSay(c);
+        if (hall.host) netSay(hallPack());
+      }
+      if (!hall.host) {
+        net.pingT -= dt;
+        if (net.pingT <= 0) {
+          net.pingT = net.rtt > 1 ? 0.4 : 3;
+          netSay({ t: "ping", c: performance.now() / 1e3 });
+        }
+        if (net.hT && now - net.hT > 6000) {
+          net.lost = "Die Halle antwortet nicht mehr.";
+          netLeave();
+          attract();
+          return;
+        }
+      }
+      for (const id in net.people) if (now - net.people[id].at > 6000) netGone(+id);
+      netKarts(dt);
+      netFigures(dt, time);
+    }
     const allSat = () => {
       for (let i = 0; i < race.karts.length; i++) if (!seat(i).sat) return false;
       return true;
     };
-    const runBook = () => RUN.phase === "open" || RUN.phase === "board" ? RUN.no : RUN.no + 1;
+    const runBook = () => RUN.phase === "open" ? RUN.no : RUN.no + 1;
     function resultSheet() {
       const p = race.player;
       fillResults(race.results(), race.laps);
@@ -11429,13 +12065,16 @@ void main(){
       $2("r-sub").textContent = `Platz ${p.pos} von ${race.karts.length} nach ${race.laps} Runden. Deine schnellste Runde: ${isFinite(p.best) ? fmtTime(p.best) : "\u2013"}.`;
     }
     function runSet(phase, force) {
-      const P = race.player, mine = me.in === "kart", welt = document.body.classList.contains("welt");
+      const P = race.player, mine = me.in === "kart" && !RUN.quiet, welt = document.body.classList.contains("welt"), loud = !RUN.quiet;
       RUN.phase = phase;
       RUN.t = 0;
       RUN.flagT = 0;
+      RUN.wait = 0;
       if (phase === "open") setPit(false, false, false);
       else if (phase === "board") {
-        race.laps = SET.laps;
+        if (hall.host) seatsCall();
+        race.laps = hall.set.laps;
+        race.final = null;
         brief.result = null;
         for (let i = 0; i < race.karts.length; i++) {
           const k = race.karts[i], bb = bay(i);
@@ -11443,11 +12082,11 @@ void main(){
           k.z = bb.z;
           k.th = bb.th;
         }
-        race.pitBegin(SITE.pit, SET.quali !== "ohne");
+        race.pitBegin(SITE.pit, hall.set.quali !== "ohne");
         race.pitHold = true;
         setPit(true, false, false);
         crewCall(!!force);
-        voiceSay("aufruf", "halle", { run: phase });
+        if (loud) voiceSay("aufruf", "halle", { run: phase });
       } else if (phase === "out") {
         race.pitHold = false;
         for (let i = 0; i < race.karts.length; i++) {
@@ -11455,7 +12094,7 @@ void main(){
           if (k.human && !(race.autoPlayer && k === P) && seat(i).sat) k.hold = false;
         }
         setPit(true, true, false);
-        voiceSay("ausfahrt", "halle", { run: phase });
+        if (loud) voiceSay("ausfahrt", "halle", { run: phase });
         if (mine) {
           hud.message("Boxenausfahrt offen", "", 2.6);
           note(welt ? DEVICE.touch ? "Bremse halten: r\xFCckw\xE4rts" : "S oder ↓: r\xFCckw\xE4rts" : G2.outHow);
@@ -11466,23 +12105,26 @@ void main(){
         G2.gridT = 2.6;
         G2.finishT = 0;
         G2.lightsShown = -1;
-        audio.armStart();
+        RUN.lights = null;
+        if (loud) audio.armStart();
         hud.lights(0, false);
-        hud.message("Bereit machen", "", 2.2);
+        if (loud) hud.message("Bereit machen", "", 2.2);
         world.setStartLights(0, false);
       } else if (phase === "race") {
         world.setStartLights(0, true);
-        hud.lights(5, true);
-        hud.message("Los", "hot", 1.1);
-        audio.beep(1320, 0.5, 0.28);
-        setTimeout(() => hud.lights(0, false), 1500);
+        if (loud) {
+          hud.lights(5, true);
+          hud.message("Los", "hot", 1.1);
+          audio.beep(1320, 0.5, 0.28);
+          setTimeout(() => hud.lights(0, false), 1500);
+        }
       } else if (phase === "in") {
         race.pitIn(SITE.pit, bay);
-        race.final = race.karts.map((k) => k.pos);
+        if (hall.host || !race.final) race.final = race.karts.map((k) => k.pos);
         crew.called = false;
         crew.pod = crew.on && race.karts.length > 3 ? { phase: "gather", t: 0, end: 0, up: false, top: [1, 2, 3].map((p) => race.final.indexOf(p)) } : null;
         brief.result = brief.last = race.karts.map((k, i) => ({ pos: race.final ? race.final[i] : k.pos, name: k.driver.name, best: isFinite(k.best) ? fmtTime(k.best) : "–", color: k.driver.color, seat: i })).sort((a, b) => a.pos - b.pos);
-        for (const k of race.karts) if (isFinite(k.best) && k.best > 0 && !(SET.rec > 0 && SET.rec <= k.best)) {
+        if (hall.host) for (const k of race.karts) if (isFinite(k.best) && k.best > 0 && !(SET.rec > 0 && SET.rec <= k.best)) {
           SET.rec = k.best;
           SET.recName = k.driver.name;
           saveSettings();
@@ -11504,9 +12146,10 @@ void main(){
       const R = "LAUF " + RUN.no + " \xB7 ", ph = RUN.phase, n = race.karts.length;
       if (ph === "open") {
         if (brief.result && crew.pod && crew.pod.phase !== "done") return "SIEGEREHRUNG AM PODEST";
+        if (RUN.wait > 0.5 && RUN.wait < 45) return R + "AUFRUF IN 0:" + String(Math.ceil(45 - RUN.wait)).padStart(2, "0");
         for (let i = 0; i < n; i++) {
-          const q = seat(i);
-          if (q.booked && !q.helm) return R + "FAHRER ZUR AUSR\xDCSTUNG";
+          const h = holder(i);
+          if (h && h.booked && h.lies !== 1) return R + "FAHRER ZUR AUSR\xDCSTUNG";
         }
         return R + "CHECK-IN GE\xD6FFNET";
       }
@@ -11521,19 +12164,53 @@ void main(){
     }
     function runStep(dt) {
       RUN.t += dt;
-      if (hall.host && RUN.kind === "visit" && hallAsset) runDecide(dt);
+      if (hall.host) {
+        hall.set.laps = SET.laps;
+        hall.set.quali = SET.quali;
+        hall.set.opp = SET.opp;
+        hall.set.level = SET.level;
+        hall.rec[0] = SET.rec;
+        hall.rec[1] = SET.recName;
+        if (RUN.kind === "visit" && hallAsset) runDecide(dt);
+      }
       hall.call = runCall();
     }
     function runDecide(dt) {
       const ph = RUN.phase, ks = race.karts;
       if (ph === "open") {
-        let ready = false;
-        for (let i = 0; i < ks.length; i++) if (ks[i].human) {
-          const q = seat(i);
-          if (q.booked && q.helm) ready = true;
+        let ready = 0, late = 0;
+        for (let i = 0; i < ks.length; i++) {
+          const h = holder(i);
+          if (h && h.booked && h.lies === 1) ready++;
+          else if (h && (i !== me.seat || net.on || h.booked)) late++;
         }
-        if (ready && crewReady()) runSet("board");
+        for (const id in net.people) if (net.people[id].seat < 0) late++;
+        if (ready) RUN.wait += dt;
+        else RUN.wait = 0;
+        if (ready && crewReady() && (!late || RUN.wait > 45)) runSet("board");
       } else if (ph === "board") {
+        let some = false;
+        for (let i = 0; i < ks.length; i++) if (ks[i].human && seat(i).sat) some = true;
+        if (some) RUN.wait += dt;
+        if (RUN.wait > 90) for (let i = 0; i < ks.length; i++) if (ks[i].human && !seat(i).sat && i !== me.seat) {
+          const p = net.people[hall.seats[i]];
+          if (p) p.drop = RUN.no;
+          ks[i].human = false;
+          ks[i].own = true;
+          ks[i].net = null;
+          ks[i].driver = DRIVERS[i % DRIVERS.length];
+          botJoin(ks[i]);
+          if (crew.on) {
+            const f = crewFigure(i), sp = kartSide(ks[i], 1.6);
+            f.x = sp[0];
+            f.z = sp[1];
+            f.y = 0;
+            f.v = f.crouch = 0;
+            f.state = "wait";
+            crewShow(f, true);
+          }
+          crewCall(true);
+        }
         if (allSat()) runSet("out");
       } else if (ph === "out") {
         if (race.pitOut && PIT.open) setPit(false, false, false);
@@ -11553,7 +12230,7 @@ void main(){
       }
     }
     function runHurry() {
-      if (RUN.kind !== "visit" || !hallAsset) return;
+      if (RUN.kind !== "visit" || !hallAsset || !hall.host) return;
       if (RUN.phase === "in") {
         RUN.no++;
         RUN.phase = "open";
@@ -11582,7 +12259,7 @@ void main(){
       hud.lights(0, false);
       const how = (DEVICE.touch ? "R\xFCckw\xE4rts aus der Box (Bremse halten)" : "R\xFCckw\xE4rts aus der Box (S oder \u2193)") + (race.quali ? ", aufw\xE4rmen bis zur Linie: Dann z\xE4hlt eine Runde auf Zeit" : ", dann eine Runde zu Startbox " + (race.player.slot + 1));
       G2.outHow = how;
-      if (allSat()) runSet("out");
+      if (hall.host && allSat()) runSet("out");
       else hud.message("Die anderen steigen ein", "", 2.6);
       const k = race.player;
       slotMark.position.set(k.gx, 0, k.gz);
@@ -11608,6 +12285,7 @@ void main(){
       G2.parked = false;
       $2("note").classList.remove("on");
       foot.booked = false;
+      me.book = 0;
       voice.bare = true;
       G2.blend = { t: 0, dur: 0.8, x: cam.x, y: cam.y, z: cam.z, lx: cam.lx, ly: cam.ly, lz: cam.lz };
       me.in = "foot";
@@ -11761,8 +12439,8 @@ void main(){
       const hz = SITE.helm;
       const sa = hallAsset && !near ? steleAt(x, z, foot.y) : null;
       foot.at = sa ? sa : !hallAsset || near || foot.y > 1 ? null
-        : !foot.helm && !foot.back && z > 55.2 && z < 57 && x > -36.6 && x < -23.4 && (!foot.booked || Math.abs(x - hz.slots[me.seat][0]) < 0.8) ? "helm"
-        : x > -36.3 && x < -35.3 && Math.abs(z - hz.backs[me.seat][2]) < 0.8 ? foot.helm ? "back" : foot.back ? "helm" : null : null;
+        : !foot.helm && !foot.back && z > 55.2 && z < 57 && x > -36.6 && x < -23.4 && (!foot.booked || me.seat >= 0 && Math.abs(x - hz.slots[me.seat][0]) < 0.8) ? "helm"
+        : me.seat >= 0 && x > -36.3 && x < -35.3 && Math.abs(z - hz.backs[me.seat][2]) < 0.8 ? foot.helm ? "back" : foot.back ? "helm" : null : null;
       if (foot.sayT > 0) foot.sayT -= dt;
       footHint();
     }
@@ -11870,6 +12548,7 @@ void main(){
         const was = foot.desk && !foot.booked, j = nearTerm();
         SET.name = cleanName($2("b-name").value) || "Gast";
         foot.booked = true;
+        me.book = runBook();
         deskClose();
         nameKarts();
         saveSettings();
@@ -12225,13 +12904,18 @@ void main(){
       const dt = clamp(rawDt, 1e-3, 0.05);
       const player = race.player;
       const racing = G2.state === "race" || G2.state === "finished" || G2.state === "outlap" || G2.state === "inlap";
-      if (!G2.paused) {
+      if (!G2.paused || net.on) {
         G2.time += dt;
         if (RUN.phase === "grid" && RUN.kind !== "demo") {
           G2.gridT += dt;
-          const st = audio.start;
+          const sa = audio.start;
+          if (hall.host && sa && (!RUN.lights || !net.on)) {
+            const d = hall.now() - audio.now();
+            RUN.lights = [sa.t0 + d, sa.go + d];
+          }
+          const st = RUN.lights ? { t0: RUN.lights[0], go: RUN.lights[1] } : null;
           if (st) {
-            const now = audio.now();
+            const now = hall.now();
             const beats = (now - st.t0) / BEAT;
             const n = clamp(Math.floor(beats) - 1, 0, 5);
             if (now >= st.go) {
@@ -12246,10 +12930,14 @@ void main(){
           }
         }
         const afoot = G2.state === "foot";
-        if (afoot) footStep(dt);
+        if (afoot && !G2.paused) footStep(dt);
+        netStep(dt, G2.time);
         const laps = G2.state === "outlap" || G2.state === "inlap";
         const own = !player || !player.finished || G2.state === "inlap" || G2.state === "finished" && G2.visit && !!hallAsset;
-        if (player && own && G2.state !== "menu" && !afoot && !(race.autoPlayer && laps)) readInput(player);
+        if (player && G2.paused) {
+          player.input.throttle = player.input.brake = player.input.steer = 0;
+          player.input.boost = false;
+        } else if (player && player.human && player.own && own && G2.state !== "menu" && !afoot && !(race.autoPlayer && laps)) readInput(player);
         if (!(RUN.phase === "open" && race.state !== "pit")) race.step(dt);
         handleEvents();
         runStep(dt);
@@ -12411,7 +13099,7 @@ void main(){
           const ck = attractCam(dt);
           if (ck) camKart = ck;
         } else if (player) {
-          const model = models[me.seat];
+          const model = models[me.seat] || models[0];
           const old = SET.fahr === "vorher";
           if (G2.camMode === 1) (old ? onboardCamOld : SET.sitz !== "alt" ? seatCam : onboardCam)(player, dt, model);
           else (old ? chaseCamOld : chaseCam)(player, dt, G2.camMode === 2);
@@ -12456,7 +13144,7 @@ void main(){
           zone.intensity = clamp(m * 2.2, 0.25, 2.2);
           zone.position.set(camKart.x, camKart.y + 3.2, camKart.z);
         }
-        models[me.seat].setOnboard(G2.camMode === 1 && G2.state !== "menu" && !afoot, SET.fahr !== "vorher" && SET.sitz !== "alt" ? SEAT.body : 0);
+        (models[me.seat] || models[0]).setOnboard(G2.camMode === 1 && G2.state !== "menu" && !afoot, SET.fahr !== "vorher" && SET.sitz !== "alt" ? SEAT.body : 0);
         const boostNow = !!(player && player.boosting && G2.state !== "menu");
         if (boostNow && !G2.wasBoost) audio.boostOn();
         G2.wasBoost = boostNow;
@@ -12512,7 +13200,7 @@ void main(){
     $2("m-walk").disabled = false;
     attract();
     requestAnimationFrame(frame);
-    window.__ns = { guide, voice, voiceSay, stele, STELE, TERMS, LINK, linkAt, proj, flag, info, dash, models, gear, brief, deskOpen, deskClose, crew, crewCall, crewSeated, FIG, enterHall, leaveKart, footAct, foot, FOOT, SITE, PIT, setPit, startOutlap: meSit, startInlap: () => runSet("in"), hall, me, runSet, runStep, seat, getOut, applyLook, LOOKS, G: G2, SET, race, audio, world, cam, camera, renderer, post, scene, track, models, beginRace, attract, setPaused, hud, fx, keys, AIDriver, HULL, HIT, KP, Kart, stepKart, steerLimit, FEELS, setFeel, nextFeel, rig, AHEAD, nextAhead, PHYS, setPhys, SEATS, setSeat, nextSeat, BACK, DEVICE, touch };
+    window.__ns = { guide, voice, voiceSay, stele, STELE, TERMS, LINK, linkAt, proj, flag, info, dash, models, gear, brief, deskOpen, deskClose, crew, crewCall, crewSeated, FIG, enterHall, leaveKart, footAct, foot, FOOT, SITE, PIT, setPit, startOutlap: meSit, startInlap: () => runSet("in"), hall, me, runSet, runStep, seat, holder, net, netOpen, netLeave, getOut, applyLook, LOOKS, G: G2, SET, race, audio, world, cam, camera, renderer, post, scene, track, models, beginRace, attract, setPaused, hud, fx, keys, AIDriver, HULL, HIT, KP, Kart, stepKart, steerLimit, FEELS, setFeel, nextFeel, rig, AHEAD, nextAhead, PHYS, setPhys, SEATS, setSeat, nextSeat, BACK, DEVICE, touch };
   }
   function buildEnv(renderer) {
     const THREE = window.THREE;
