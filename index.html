@@ -5,7 +5,7 @@
 <!-- Nachtschicht Grand Prix. (c) 2026. Alle Rechte vorbehalten. Kopieren, Veraendern, Weiterverbreiten und Einbetten nur mit schriftlicher Erlaubnis; siehe LICENSE.txt. -->
 <meta name="robots" content="noindex, nofollow">
 <script>(function(){var ok=["dyson96.github.io"],h=location.hostname,loc=h===""||h==="localhost"||h==="127.0.0.1"||h==="[::1]"||/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(h)||/\.local$/.test(h),own=loc||!ok.length||ok.indexOf(h)>=0,fr=false;try{fr=window.top!==window.self}catch(e){fr=true}if(!own||(fr&&!loc)){window.__LOCK=1;document.write('<meta charset="utf-8"><body style="margin:0;background:#050409;color:#ccd;font:16px/1.5 sans-serif;display:grid;place-items:center;height:100vh;text-align:center"><p>Nachtschicht Grand Prix l\u00e4uft nur auf seiner eigenen Adresse.<br><a style="color:#ff4fa0" href="https://dyson96.github.io/nachtschicht/">Zum Spiel</a></p></body>');document.close();if(window.stop)window.stop();}})();</script>
-<script>window.__BUILD="15.11.2026 18:58";</script>
+<script>window.__BUILD="15.11.2026 19:29";</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -83,10 +83,12 @@ body.walking #gl { cursor: crosshair; }
 #walk { position: fixed; inset: 0; z-index: 4; display: none; pointer-events: none; touch-action: none;
   --edge-l: max(20px, env(safe-area-inset-left)); --edge-r: max(20px, env(safe-area-inset-right)); --edge-b: max(18px, env(safe-area-inset-bottom)); }
 body.walking #walk { display: block; }
-#w-hint { position: absolute; left: 50%; bottom: clamp(18px, 6vh, 60px); transform: translateX(-50%); padding: 8px 16px 7px; border: 1px solid rgba(241, 238, 252, 0.22);
+#k-hint { position: fixed; z-index: 4; pointer-events: none; }
+#w-hint, #k-hint { position: absolute; left: 50%; bottom: clamp(18px, 6vh, 60px); transform: translateX(-50%); padding: 8px 16px 7px; border: 1px solid rgba(241, 238, 252, 0.22);
   border-radius: 6px; background: rgba(5, 4, 9, 0.78); font-size: 16px; font-weight: 600; letter-spacing: 0.03em; color: var(--paper); white-space: nowrap; opacity: 0; transition: opacity 0.25s; }
-#w-hint.on { opacity: 1; }
-#w-hint b { display: inline-block; min-width: 1.5em; margin-right: 0.5em; padding: 1px 6px; border: 1px solid var(--cyan); border-radius: 4px; color: var(--cyan); text-align: center; }
+#k-hint { position: fixed; }
+#w-hint.on, #k-hint.on { opacity: 1; }
+#w-hint b, #k-hint b { display: inline-block; min-width: 1.5em; margin-right: 0.5em; padding: 1px 6px; border: 1px solid var(--cyan); border-radius: 4px; color: var(--cyan); text-align: center; }
 #walk .zone, #w-act, #w-pause { display: none; }
 body.touch #walk .zone { display: block; position: absolute; top: 0; bottom: 0; pointer-events: auto; touch-action: none; }
 body.touch #w-move { left: 0; width: 42%; }
@@ -100,7 +102,7 @@ body.touch #w-act { position: absolute; right: calc(var(--edge-r) + 18px); botto
 body.touch #w-act.on { display: block; }
 body.touch #w-pause { display: block; position: absolute; left: var(--edge-l); top: max(14px, env(safe-area-inset-top)); width: 46px; height: 32px; border-radius: 8px; pointer-events: auto;
   background: rgba(10, 9, 18, 0.5); border: 1px solid rgba(241, 238, 252, 0.3); color: var(--paper); font-weight: 700; }
-body.touch #w-hint { bottom: auto; top: clamp(14px, 6vh, 40px); }
+body.touch #w-hint, body.touch #k-hint { bottom: auto; top: clamp(14px, 6vh, 40px); }
 #gl { position: fixed; inset: 0; width: 100%; height: 100%; display: block; outline: none;
   background: radial-gradient(120% 90% at 30% 100%, #1b0a2e 0%, var(--pitch) 60%); }
 
@@ -466,6 +468,7 @@ body.touch .keys { display: none; }
   <button id="w-act" type="button">Einsteigen</button>
   <div id="w-hint" role="status"></div>
 </div>
+<div id="k-hint" role="status"></div>
 
 <div id="touch">
   <div class="zone" id="t-zone-l">
@@ -2492,6 +2495,21 @@ body.touch .keys { display: none; }
         }
         drive(k, tx, tz, vT);
       };
+      const creep = (k, rem) => {
+        if (rem > 0.4) return false;
+        const inp = k.input, go = rem > Math.max(0, k.u) * 0.37 - 0.013;
+        inp.throttle = go ? clamp(0.22 + (0.3 - k.u) * 1.2, 0, 0.6) : 0;
+        inp.brake = k.u > (go ? 0.5 : 0.3) ? clamp((k.u - 0.3) * 1.5, 0, 1) : 0;
+        inp.boost = false;
+        return !go && Math.abs(k.u) < 0.04;
+      };
+      const dock = (k, tx, tz, tth, rem) => {
+        if (rem > 1.2 || k.u <= 0) return;
+        const w = Math.min(1, k.u * dt * 3.5), c = Math.cos(tth), sn = -Math.sin(tth), side = -(k.x - tx) * sn + (k.z - tz) * c;
+        k.x += sn * side * w;
+        k.z -= c * side * w;
+        k.th += wrapAngle(tth - k.th) * w;
+      };
       const stay = (k) => {
         k.prevS = k.s;
         k.hold = true;
@@ -2548,6 +2566,7 @@ body.touch .keys { display: none; }
             if (k.s - A.sE < A.sN + 8) mouth = true;
             continue;
           }
+          if (k.q === 2 && !inPit(k) && k.s > A.iOut * tr.ds - 4 && k.s < A.iOut * tr.ds + 14) on = true;
           const to = A.sE - k.s;
           if (inPit(k)) continue;
           if (k.q === 2 && linkAt(k.x, k.z) && A._s > -10 && A._s < A.sN + 10 && Math.abs(A._d) < A.hw + 1.5) mouth = true;
@@ -2577,9 +2596,9 @@ body.touch .keys { display: none; }
           k.hold = false;
         }
         d.idle = Math.abs(k.u) < 0.25 ? d.idle + dt : 0;
-        if (d.idle > 12 && !(d.nudge > 0) && d.mode !== "back") {
+        if (d.idle > (d.mode === "grid" && !k.auto ? 3 : 12) && !(d.nudge > 0) && d.mode !== "back" && !d.rev) {
           d.nudge = 1.5;
-          d.nudges = (d.nudges || 0) + 1;
+          if (d.mode !== "grid") d.nudges = (d.nudges || 0) + 1;
         }
         if (d.nudges > 5 || this.pitT > d.release + (qOn ? 330 : 170) + 45) {
           if (inn) park(k);
@@ -2614,7 +2633,7 @@ body.touch .keys { display: none; }
           }
         } else if (d.mode === "out") {
           lane = true;
-          follow(d, k, ahead(k, 4.5) ? 0 : 5.5, 4.5);
+          follow(d, k, ahead(k, Math.max(4.5, k.u * k.u / 4.4 + 1.5)) ? 0 : 5.5, 4.5);
           if (d.pi === d.path.length - 1 && k.x > 26) {
             d.mode = "lap";
             d.bias = null;
@@ -2658,24 +2677,30 @@ body.touch .keys { display: none; }
           else if (gap < -L / 2) gap += L;
           const far = Math.max(gap, 0), o = tr.at(k.s + 5, this._po || (this._po = {}));
           let dd = k.gd;
-          if (far > 5.5) for (const q of this.karts) if (q !== k && q.set && q.gs > k.s + 1 && q.gs < k.gs - 1) {
+          if (far > 5.5) for (const q of this.karts) {
+            if (q === k) continue;
+            const there = q.set ? q.gs > k.s + 1 && q.gs < k.gs - 1 : Math.abs(q.u) < 2 && !q.link && q.s > k.s + 1 && q.s < k.gs - 1 && Math.abs(q.d) < 3.2;
+            if (!there) continue;
             if (qOn) dd = 0;
-            else if (Math.abs(q.gd - k.gd) < 1) dd = -Math.sign(k.gd) * 0.9;
+            else if (Math.abs((q.set ? q.gd : q.d) - k.gd) < 1.3) dd = -Math.sign(k.gd) * 0.9;
           }
           const on2 = 2.5 - far, tx = far < 5 ? k.gx + Math.cos(k.gth) * on2 : o.x - Math.sin(o.th) * dd, tz = far < 5 ? k.gz - Math.sin(k.gth) * on2 : o.z - Math.cos(o.th) * dd;
           if (!d.rev && gap < -0.25) d.rev = 0.6;
           if (d.rev) {
-            const inp = k.input, on = gap < d.rev && !behind(k, 2.6);
+            const inp = k.input, held = gap < d.rev && behind(k, 2.6), on = gap < d.rev && !held;
             inp.analog = true;
             inp.steer = clamp(-2.5 * wrapAngle(k.gth - k.th), -0.6, 0.6);
             inp.boost = false;
             inp.brake = on && k.u > -1.4 ? 1 : 0;
             inp.throttle = !on && k.u < -0.25 ? 0.35 : 0;
-            if (!on && Math.abs(k.u) < 0.3) d.rev = 0;
+            d.revT = held ? (d.revT || 0) + dt : 0;
+            if (!on && Math.abs(k.u) < 0.3 && !(held && d.revT < 6)) d.rev = d.revT = 0;
             d.idle = 0;
           } else {
-            drive(k, tx, tz, ahead(k, 3) ? 0 : Math.min(qOn && dd === 0 ? 4.5 : 7, far > 0.1 ? Math.max(0.8, Math.sqrt(2 * 2.2 * Math.max(0, far - 0.08))) : 0));
-            if (far <= 0.2 && Math.abs(k.u) < 0.12) stay(k);
+            const free = !ahead(k, Math.max(3, k.u * k.u / 4.4 + 1.5));
+            drive(k, tx, tz, free ? Math.min(qOn && dd === 0 ? 4.5 : 7, Math.max(0.8, Math.sqrt(2 * 1.2 * Math.max(0, far - 0.3)))) : 0);
+            dock(k, k.gx, k.gz, k.gth, far);
+            if (free && creep(k, far)) stay(k);
           }
         } else if (d.mode === "lapin") {
           let toIn = L - 27 - k.s;
@@ -2709,8 +2734,12 @@ body.touch .keys { display: none; }
             d.idle = 0;
           } else {
             const last = d.pi >= d.path.length - 1, rem = -al;
-            follow(d, k, ahead(k, 3.4) ? 0 : last ? Math.min(4, rem > 0.1 ? Math.max(0.8, Math.sqrt(2 * 1.8 * Math.max(0, rem - 0.08))) : 0) : 5, last ? 2.8 : 3.5);
-            if (last && rem <= 0.2 && Math.abs(k.u) < 0.12) stay(k);
+            const free = !ahead(k, Math.max(3.4, k.u * k.u / 4.4 + 1.5));
+            follow(d, k, free ? last ? Math.min(4, Math.max(0.8, Math.sqrt(2 * 1.2 * Math.max(0, rem - 0.3)))) : 5 : 0, last ? 2.8 : 3.5);
+            if (last) {
+              dock(k, k.bx, k.bz, k.bth, rem);
+              if (free && creep(k, rem)) stay(k);
+            }
           }
         }
       }
@@ -2719,20 +2748,16 @@ body.touch .keys { display: none; }
         if (inPit(H)) lane = true;
         const ready = inn || this.qDone, dist = ready ? Math.hypot((inn ? H.bx : H.gx) - H.x, (inn ? H.bz : H.gz) - H.z) : 1e3;
         H.parkD = dist;
-        if (dist < (inn ? 0.75 : 0.6) && Math.abs(H.u) < 0.25 && Math.abs(wrapAngle(H.th - (inn ? H.bth : H.gth))) < (inn ? 0.5 : 0.3)) {
-          stay(H);
-          continue;
-        }
         H.nearT = dist < 7 && Math.abs(H.u) < 0.4 ? (H.nearT || 0) + dt : 0;
         if (dist > 10) H.nearSaid = false;
-        if (H.nearT > 3.5 && !H.nearSaid) {
+        if (H.nearT > 3 && !H.nearSaid) {
           H.nearSaid = true;
           this.events.push({ type: "park", k: H });
         }
         if (this.pitT > (inn ? 300 : qOn ? 420 : 260)) {
           if (!inn && !this.qDone) this.qualiClose();
           this.autoTake(H, "frist", true);
-        } else if (H.nearT > 15) this.autoTake(H, "platz");
+        } else if (H.nearT > 12) this.autoTake(H, "platz");
       }
       if (!this.host) return;
       for (const k of this.karts) if (!k.own && !k.set) {
@@ -2782,7 +2807,9 @@ body.touch .keys { display: none; }
         if (!lane) d.mode = "lapin";
         else {
           d.mode = "in";
-          if (k.z > 38.9) d.rev = 2;
+          const al = (k.x - k.bx) * Math.cos(k.bth) - (k.z - k.bz) * Math.sin(k.bth), by = (k.x - k.bx) * Math.sin(k.bth) + (k.z - k.bz) * Math.cos(k.bth);
+          if (k.z > 38.9 && al < -1.3 && Math.abs(by) < 0.4 && Math.abs(wrapAngle(k.th - k.bth)) < 0.14) d.pi = 1;
+          else if (k.z > 38.9) d.rev = 2;
           else if (k.x > k.bx - 3) d.rev = 1;
           d.path = [[k.bx - 1.9, k.bz - 2.2], [k.bx + 1.5 * Math.cos(k.bth), k.bz - 1.5 * Math.sin(k.bth)]];
           if (!d.rev && k.x < k.bx - 5.4) d.path.unshift([k.bx - 4.2, lz + 0.6]);
@@ -2802,7 +2829,8 @@ body.touch .keys { display: none; }
         const near = this.qDone && (!this.quali || k.q === 2) && gap > -9 && gap < 24;
         const side = (k.x - k.gx) * Math.sin(k.gth) + (k.z - k.gz) * Math.cos(k.gth);
         d.mode = near ? "grid" : "lap";
-        if (near && gap < 6 && (gap < 0.3 || Math.abs(side) > 0.25 || Math.abs(wrapAngle(k.th - k.gth)) > 0.1)) d.rev = 6;
+        const off = Math.abs(wrapAngle(k.th - k.gth));
+        if (near && gap < 6 && (gap < 1.5 || Math.abs(side) > 0.4 || off > 0.14)) d.rev = clamp(2 + Math.abs(side) * 5 + off * 9, 2.5, 6);
       }
       if (this.quali && !inn && k.q < 2) k.qAuto = true;
       this.pitDrivers.push(d);
@@ -6613,7 +6641,7 @@ if (kCoat > 0.01) {
     frame.rotation.order = "YZX";
     const K = A.keys;
     const half = A.steerMax / 2;
-    let brake = 0;
+    let brake = 0, wasSet = false, okT = 0;
     let leanS = 0, lookS = 0, nodS = 0;
     let jx = 0, jxv = 0, jz = 0, jzv = 0;
     const shake = [0, 0, 0, 0];
@@ -6658,8 +6686,14 @@ if (kCoat > 0.01) {
         }
       }
       brake += ((k.brk > 0.08 ? 1 : 0) - brake) * Math.min(1, dt * 18);
+      if (k.set && !wasSet) okT = 2.6;
+      wasSet = !!k.set;
+      if (okT > 0) okT -= dt;
       const flash = k.auto ? performance.now() % 700 < 350 ? 2 : 0 : 1, tl = k.auto ? 0.4 + flash * 4.4 : 1.8 + brake * 7;
-      tailMat.color.setRGB(tl, tl * (k.auto ? 0.42 : 0.035), tl * 0.02);
+      if (okT > 0) {
+        const g = 6.5 * Math.min(1, okT / 0.6);
+        tailMat.color.setRGB(g * 0.1, g, g * 0.28);
+      } else tailMat.color.setRGB(tl, tl * (k.auto ? 0.42 : 0.035), tl * 0.02);
       const boostK = k.boosting ? 1.9 : 1;
       {
         const lit = k.boost > 0.02 ? Math.max(1, Math.round(clamp01(k.boost) * BOOST_N / 2)) : 0, flash = k.boosting ? 1 + ((performance.now() / 70 | 0) & 1) : 0, key = lit + ":" + flash;
@@ -9192,7 +9226,7 @@ void main(){
       pit: [0, 0, 0], rec: [SET.rec, SET.recName] };
     const RELAY = "wss://nachtschicht.nachtschicht-gp.workers.dev";
     const RUN = hall.run;
-    const me = { in: "menu", seat: 0, run: 0, book: 0 };
+    const me = { in: "menu", seat: 0, run: 0, book: 0, idleT: 0, idleSaid: false, stuckT: 0 };
     status("Karts rollen aus der Box \u2026");
     await nextFrame();
     kartAsset = await loadKartAsset();
@@ -10608,8 +10642,7 @@ void main(){
         const lapT = qq === 1 ? race.pitT - player.qStart : qq === 2 && isFinite(player.qTime) ? player.qTime
           : race.state === "racing" && player.lap >= 1 ? race.time - player.lapStart : race.state === "racing" ? race.time : 0;
         speed = Math.round(Math.abs(player.u) * 3.6);
-        const tol = out ? 0.6 : 0.75;
-        lapL = player.auto ? "AUTOMATIK" : pit && !player.set && player.parkD < 12 ? (player.parkD < tol ? "STOPP" : (out ? "STARTBOX " : "BOX ") + player.parkD.toFixed(1).replace(".", ",") + " m") + (player.nearSaid ? document.body.classList.contains("touch") ? " \u00b7 \u21ba" : " \u00b7 R" : "") : guide.dash || (!pit ? "RUNDE " + clamp(player.lap, 1, race.laps) + "/" + race.laps : !out ? "AUSLAUFRUNDE" : qq === 0 ? "AUFW\u00c4RMEN" : qq === 1 ? "ZEITRUNDE" : "ZUR STARTBOX");
+        lapL = pit && player.set ? out ? "IN POSITION" : "GEPARKT" : player.auto ? "AUTOMATIK" : pit && player.parkD < 40 ? (out ? "STARTBOX " : "BOX ") + Math.round(player.parkD) + " m \u00b7 " + (DEVICE.touch ? "\u21ba" : "R") : guide.dash || (!pit ? "RUNDE " + clamp(player.lap, 1, race.laps) + "/" + race.laps : !out ? "AUSLAUFRUNDE" : qq === 0 ? "AUFW\u00c4RMEN" : qq === 1 ? "ZEITRUNDE" : "ZUR STARTBOX");
         timeS = fmtTime(Math.max(1e-4, lapT)).slice(0, -2);
         news = hud.newsT > 0 ? hud.newsText : "";
         delta = isFinite(race.liveDelta) && race.state === "racing" ? fmtDelta(race.liveDelta).slice(0, -1) : "";
@@ -10647,7 +10680,7 @@ void main(){
           g.fillText(news, 256, 44);
         } else {
           g.textAlign = "left";
-          g.fillStyle = "#19e6ff";
+          g.fillStyle = pit && player.set ? "#5dffa2" : player.auto ? "#ffc23a" : "#19e6ff";
           g.font = "700 36px " + F;
           g.fillText(lapL, 16, 44, guide.dash ? 480 : 330);
           if (!guide.dash) {
@@ -12756,6 +12789,20 @@ void main(){
         stick(0, 0);
       });
     }
+    function kartHint() {
+      const el = $2("k-hint"), k = race.player, key = "<b>" + (DEVICE.touch ? "\u21ba" : "R") + "</b>";
+      let text = "";
+      if (k && me.in === "kart" && !G2.paused && !race.demo && G2.state !== "menu") {
+        if (k.auto) text = k.autoFin ? "" : key + "selbst fahren";
+        else if (race.state === "pit" && !k.set && !k.hold && k.parkD < 40) text = key + "Einparken";
+        else if (me.stuckT > 1.5) text = key + "Die Automatik f\xE4hrt dich frei";
+      }
+      if (el.dataset.t !== text) {
+        el.dataset.t = text;
+        if (text) el.innerHTML = text;
+        el.classList.toggle("on", !!text);
+      }
+    }
     function autoKey() {
       const k = race.player;
       if (!k || me.in !== "kart" || G2.paused) return;
@@ -12813,7 +12860,7 @@ void main(){
           if (e.k === race.player) voiceSay("auto_platz", "helm");
         } else if (e.type === "auto") {
           if (e.k === race.player) {
-            if (e.on && e.why !== "weiter") voiceSay(e.why === "taste" ? "auto_an" : e.why === "frist" ? "auto_frist" : "auto_zwang", "helm", { now: true });
+            if (e.on && e.why !== "weiter") voiceSay(e.why === "taste" ? "auto_an" : e.why === "frist" ? "auto_frist" : e.why === "still" ? "auto_still" : "auto_zwang", "helm", { now: true });
             else if (e.why === "hand") voiceSay("auto_aus", "helm", { now: true });
             dash.t = 0;
           }
@@ -13058,8 +13105,27 @@ void main(){
             const q = autoProbe.input;
             if (!player.autoFin && (q.throttle > 0.1 || q.brake > 0.1 || Math.abs(q.steer) > 0.2)) race.autoGive(player, "hand");
           }
-          if (!player.auto) readInput(player);
+          if (!player.auto) {
+            readInput(player);
+            const q = player.input, live = !player.hold && !player.set && (race.state === "racing" || race.state === "finished" || race.state === "pit");
+            if (live && !(player.nearT > 0) && !(q.throttle > 0.05 || q.brake > 0.05 || Math.abs(q.steer) > 0.1)) me.idleT += dt;
+            else {
+              me.idleT = 0;
+              me.idleSaid = false;
+            }
+            if (me.idleT > 9 && !me.idleSaid) {
+              me.idleSaid = true;
+              voiceSay("auto_warn", "helm", { now: true });
+            }
+            if (me.idleT > 15) {
+              me.idleT = 0;
+              me.idleSaid = false;
+              race.autoTake(player, "still");
+            }
+            me.stuckT = (race.state === "racing" || race.state === "finished") && G2.state !== "grid" && !player.hold && (Math.abs(player.u) < 1.5 || Math.abs(wrapAngle(player.th - player.trTh)) > 1.75) ? me.stuckT + dt : 0;
+          } else me.idleT = me.stuckT = 0;
         }
+        kartHint();
         if (!(RUN.phase === "open" && race.state !== "pit")) race.step(dt);
         handleEvents();
         runStep(dt);
