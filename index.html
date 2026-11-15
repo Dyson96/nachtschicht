@@ -5,7 +5,7 @@
 <!-- Nachtschicht Grand Prix. (c) 2026. Alle Rechte vorbehalten. Kopieren, Veraendern, Weiterverbreiten und Einbetten nur mit schriftlicher Erlaubnis; siehe LICENSE.txt. -->
 <meta name="robots" content="noindex, nofollow">
 <script>(function(){var ok=["dyson96.github.io"],h=location.hostname,loc=h===""||h==="localhost"||h==="127.0.0.1"||h==="[::1]"||/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(h)||/\.local$/.test(h),own=loc||!ok.length||ok.indexOf(h)>=0,fr=false;try{fr=window.top!==window.self}catch(e){fr=true}if(!own||(fr&&!loc)){window.__LOCK=1;document.write('<meta charset="utf-8"><body style="margin:0;background:#050409;color:#ccd;font:16px/1.5 sans-serif;display:grid;place-items:center;height:100vh;text-align:center"><p>Nachtschicht Grand Prix l\u00e4uft nur auf seiner eigenen Adresse.<br><a style="color:#ff4fa0" href="https://dyson96.github.io/nachtschicht/">Zum Spiel</a></p></body>');document.close();if(window.stop)window.stop();}})();</script>
-<script>window.__BUILD="15.11.2026 22:22";</script>
+<script>window.__BUILD="15.11.2026 22:58";</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -12407,6 +12407,32 @@ void main(){
       netFigures(dt, time);
       talkStep(dt);
     }
+    const FRESH = { at: 0, hid: 0 };
+    function freshCheck() {
+      const now = Date.now();
+      if (!window.__BUILD || !/^https?:$/.test(location.protocol) || now - FRESH.at < 2e4) return;
+      FRESH.at = now;
+      fetch("stand.txt?" + now, { cache: "no-store" }).then((r) => r.ok ? r.text() : "").then((t) => {
+        t = t.trim();
+        if (!/^\d\d\.\d\d\.\d{4} \d\d:\d\d$/.test(t) || t === window.__BUILD) return;
+        try {
+          if (sessionStorage.getItem("ns.fresh") === t) return;
+          sessionStorage.setItem("ns.fresh", t);
+        } catch (e) {
+        }
+        const u = new URL(location.href);
+        u.searchParams.set("v", t.replace(/\D/g, ""));
+        location.replace(u.href);
+      }).catch(() => {
+      });
+    }
+    setInterval(() => {
+      if (me.in === "menu" && !document.hidden) freshCheck();
+    }, 12e4);
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) FRESH.hid = Date.now();
+      else if (FRESH.hid && Date.now() - FRESH.hid > 6e4) freshCheck();
+    });
     const REP = {
       url: RELAY && (NQ.get("melden") === "live" || !/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) ? RELAY.replace(/^ws/, "http") + "/melden" : "",
       id: Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4),
@@ -13925,6 +13951,7 @@ void main(){
     $2("m-walk").textContent = "Halle betreten";
     REP.load = Math.round(performance.now() / 100) / 10;
     repSend("start");
+    freshCheck();
     attract();
     requestAnimationFrame(frame);
     window.__ns = { talk, talkLevel, talkApply, guide, voice, voiceSay, stele, STELE, TERMS, LINK, linkAt, proj, flag, info, dash, models, gear, brief, deskOpen, deskClose, crew, crewCall, crewSeated, FIG, enterHall, leaveKart, footAct, foot, FOOT, SITE, PIT, setPit, startOutlap: meSit, startInlap: () => runSet("in"), hall, me, runSet, runStep, seat, holder, net, netOpen, netLeave, getOut, applyLook, LOOKS, G: G2, SET, race, audio, world, cam, camera, renderer, post, scene, track, models, beginRace, attract, setPaused, hud, fx, keys, AIDriver, HULL, HIT, KP, Kart, stepKart, steerLimit, FEELS, setFeel, rig, AHEAD, nextAhead, PHYS, setPhys, SEATS, setSeat, BACK, DEVICE, touch };
