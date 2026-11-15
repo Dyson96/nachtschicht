@@ -5,7 +5,7 @@
 <!-- Nachtschicht Grand Prix. (c) 2026. Alle Rechte vorbehalten. Kopieren, Veraendern, Weiterverbreiten und Einbetten nur mit schriftlicher Erlaubnis; siehe LICENSE.txt. -->
 <meta name="robots" content="noindex, nofollow">
 <script>(function(){var ok=["dyson96.github.io"],h=location.hostname,loc=h===""||h==="localhost"||h==="127.0.0.1"||h==="[::1]"||/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(h)||/\.local$/.test(h),own=loc||!ok.length||ok.indexOf(h)>=0,fr=false;try{fr=window.top!==window.self}catch(e){fr=true}if(!own||(fr&&!loc)){window.__LOCK=1;document.write('<meta charset="utf-8"><body style="margin:0;background:#050409;color:#ccd;font:16px/1.5 sans-serif;display:grid;place-items:center;height:100vh;text-align:center"><p>Nachtschicht Grand Prix l\u00e4uft nur auf seiner eigenen Adresse.<br><a style="color:#ff4fa0" href="https://dyson96.github.io/nachtschicht/">Zum Spiel</a></p></body>');document.close();if(window.stop)window.stop();}})();</script>
-<script>window.__BUILD="15.11.2026 19:29";</script>
+<script>window.__BUILD="15.11.2026 19:46";</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -84,6 +84,10 @@ body.walking #gl { cursor: crosshair; }
   --edge-l: max(20px, env(safe-area-inset-left)); --edge-r: max(20px, env(safe-area-inset-right)); --edge-b: max(18px, env(safe-area-inset-bottom)); }
 body.walking #walk { display: block; }
 #k-hint { position: fixed; z-index: 4; pointer-events: none; }
+body.touch .key-only { display: none; }
+#p-funk-info { margin: 6px 0 0; }
+#p-leute-row[hidden] { display: none; }
+#p-leute { flex-wrap: wrap; }
 #w-hint, #k-hint { position: absolute; left: 50%; bottom: clamp(18px, 6vh, 60px); transform: translateX(-50%); padding: 8px 16px 7px; border: 1px solid rgba(241, 238, 252, 0.22);
   border-radius: 6px; background: rgba(5, 4, 9, 0.78); font-size: 16px; font-weight: 600; letter-spacing: 0.03em; color: var(--paper); white-space: nowrap; opacity: 0; transition: opacity 0.25s; }
 #k-hint { position: fixed; }
@@ -377,6 +381,7 @@ body.touch .keys { display: none; }
       <li><kbd>C</kbd> Kamera: hinter dem Kart, im Sitz, weit</li>
       <li><kbd>K</kbd> Kamera-Blick in die Kurve: fest / dezent / voraus</li>
       <li><kbd>R</kbd> Automatik: das Kart fährt und parkt selbst, bis du wieder lenkst</li>
+      <li><kbd>T</kbd> Mikrofon (Sprechen schaltest du im Pause-Fenster ein)</li>
       <li><kbd>Esc</kbd> Pause</li>
       <li><kbd>M</kbd> Ton</li>
       <li><kbd>J</kbd> nächster Musiktitel</li>
@@ -422,6 +427,10 @@ body.touch .keys { display: none; }
       <div class="row touch-only"><span>Lenkung</span><div class="seg" id="p-touch"><button type="button" data-v="schieber">Schieber</button><button type="button" data-v="tasten">Tasten</button></div></div>
       <div class="row"><span>Blick voraus</span><div class="seg" id="p-ahead"><button type="button" data-v="fest">Fest</button><button type="button" data-v="dezent">Dezent</button><button type="button" data-v="voraus">Voraus</button></div></div>
       <div class="row"><span>Anzeige</span><div class="seg" id="p-hud"><button type="button" data-v="welt">Welt</button><button type="button" data-v="klassisch">Klassisch</button></div></div>
+      <div class="row"><span>Sprechen</span><div class="seg" id="p-funk"><button type="button" data-v="aus">Aus</button><button type="button" data-v="an">An</button></div></div>
+      <div class="row key-only"><span>Mikrofon</span><div class="seg" id="p-mik"><button type="button" data-v="offen">Offen</button><button type="button" data-v="taste">Taste T</button></div></div>
+      <div class="row" id="p-leute-row" hidden><span>Stumm</span><div class="seg" id="p-leute"></div></div>
+      <p id="p-funk-info" class="diag"></p>
     </div>
     <p id="p-diag" class="diag"></p>
   </div>
@@ -9080,7 +9089,7 @@ void main(){
   // src/main.js
   var $2 = (id) => document.getElementById(id);
   var STORE = "nachtschicht.v1";
-  var SET = { laps: 3, opp: 5, level: 0, music: 0.8, sfx: 0.8, gfx: "auto", best: null, cam: 0, licht: "original", fahr: "neu", blick: "dezent", touch: "schieber", sitz: "lebendig", quali: "mit", anzeige: "welt", name: "", rec: 0, recName: "" };
+  var SET = { laps: 3, opp: 5, level: 0, music: 0.8, sfx: 0.8, gfx: "auto", best: null, cam: 0, licht: "original", fahr: "neu", blick: "dezent", touch: "schieber", sitz: "lebendig", funk: "aus", mik: "offen", quali: "mit", anzeige: "welt", name: "", rec: 0, recName: "" };
   var cleanName = (v) => String(v || "").replace(/[^\p{L}\p{N} ._\-]/gu, "").replace(/\s+/g, " ").trim().slice(0, 12);
   function loadSettings(hot) {
     let s = {};
@@ -9108,6 +9117,8 @@ void main(){
     SET.sitz = "lebendig";
     setSeat(SET.sitz);
     if (SET.touch !== "tasten") SET.touch = "schieber";
+    if (SET.funk !== "an") SET.funk = "aus";
+    if (SET.mik !== "taste") SET.mik = "offen";
     setFeel(SET.fahr);
   }
   function saveSettings() {
@@ -10855,6 +10866,7 @@ void main(){
       if (e.code === "KeyB") setGhost(true);
       else if (e.code === "KeyC" && G2.state !== "foot") cycleCam();
       else if (e.code === "KeyM") toggleMute();
+      else if (e.code === "KeyT" && !e.repeat) talkKey();
       else if (e.code === "Escape" || e.code === "KeyP") {
         if (G2.state === "race" || G2.state === "grid" || G2.state === "outlap" || G2.state === "inlap" || G2.state === "foot") setPaused(!G2.paused);
       } else if (G2.state === "inlap" && G2.parked && !$2("results").classList.contains("on") && (e.code === "KeyE" || e.code === "Enter")) getOut();
@@ -11031,6 +11043,7 @@ void main(){
     }
     function attract() {
       netLeave();
+      if (talk.on) talkOff();
       me.seat = 0;
       setGhost(false);
       me.in = "menu";
@@ -11147,6 +11160,7 @@ void main(){
     function setPaused(p) {
       if (G2.paused === p) return;
       G2.paused = p;
+      if (p) talkInfo();
       if (p && window.speechSynthesis) window.speechSynthesis.cancel();
       if (audio.ctx && audio.ctx.state !== "closed") {
         if (p && voice.on && voice.on.gain) voice.on.gain.gain.value = 0;
@@ -11405,6 +11419,7 @@ void main(){
       canvas.focus();
       saveSettings();
       netOpen();
+      talkApply();
     }
     function footHint() {
       const el = $2("w-hint"), act = $2("w-act");
@@ -11898,6 +11913,7 @@ void main(){
       } else if (m.f && m.m && typeof m.m === "object") {
         const f = m.f | 0, d = m.m;
         if (d.t === "c") netPerson(f, d);
+        else if (d.t === "v") talkGot(f, d);
         else if (d.t === "k") netKick(d);
         else if (d.t === "h" && f === net.hostId && !hall.host) netHall(d);
         else if (d.t === "ping" && hall.host && performance.now() - net.beat < 1500) netSay({ t: "pong", to: f, c: d.c, h: hall.now() });
@@ -11916,6 +11932,7 @@ void main(){
       p.b = d.b | 0;
       p.l = d.l | 0;
       p.k = !!d.k;
+      p.vo = !!d.vo;
       p.r = d.r | 0;
       p.at = performance.now();
       if (Array.isArray(d.f) && d.f.length >= 5) {
@@ -11932,6 +11949,7 @@ void main(){
       const p = net.people[id];
       if (!p) return;
       if (p.fig) crewShow(p.fig, false);
+      talkClose(id);
       delete net.people[id];
       if (hall.host) for (let i = 0; i < hall.seats.length; i++) if (hall.seats[i] === id) seatFree(i);
     }
@@ -12256,7 +12274,7 @@ void main(){
       if (net.cT <= 0) {
         net.cT = net.cnt > 0 ? 0.05 : 2;
         const k = me.seat >= 0 ? race.karts[me.seat] : null, sp = Math.hypot(foot.vx, foot.vz);
-        const c = { t: "c", n: myName(), b: foot.booked ? me.book | 0 : 0, l: foot.helm ? 1 : foot.back ? 2 : 0, k: me.in === "kart" ? 1 : 0, r: me.run, f: [N3(foot.x), N3(foot.z), N3(foot.y), N3(foot.yaw), N3(sp)] };
+        const c = { t: "c", vo: talk.on ? 1 : 0, n: myName(), b: foot.booked ? me.book | 0 : 0, l: foot.helm ? 1 : foot.back ? 2 : 0, k: me.in === "kart" ? 1 : 0, r: me.run, f: [N3(foot.x), N3(foot.z), N3(foot.y), N3(foot.yaw), N3(sp)] };
         if (k && k.own && k.human && (hall.host || net.rtt < 9)) c.K = kartPack(k);
         netSay(hall.host ? [c, hallPack()] : c);
       }
@@ -12276,6 +12294,228 @@ void main(){
       for (const id in net.people) if (now - net.people[id].at > 6000) netGone(+id);
       netKarts(dt);
       netFigures(dt, time);
+      talkStep(dt);
+    }
+    const talk = { on: false, busy: false, ctx: null, mic: null, track: null, quiet: null, peers: {}, mute: {}, micOff: false, err: "", test: NQ.get("mik") === "test", sigL: "" };
+    const TALK_ICE = [{ urls: "stun:stun.cloudflare.com:3478" }];
+    async function talkOn() {
+      if (talk.on || talk.busy || !window.RTCPeerConnection) return;
+      talk.busy = true;
+      talk.err = "";
+      try {
+        const AC = window.AudioContext || window.webkitAudioContext;
+        if (!talk.ctx) talk.ctx = new AC({ latencyHint: "interactive" });
+        if (talk.ctx.state === "suspended") talk.ctx.resume().catch(() => {
+        });
+        if (!talk.quiet) talk.quiet = talk.ctx.createMediaStreamDestination().stream.getAudioTracks()[0];
+        if (talk.test) {
+          const o = talk.ctx.createOscillator(), g = talk.ctx.createGain(), dst = talk.ctx.createMediaStreamDestination();
+          o.frequency.value = 440;
+          g.gain.value = 0.25;
+          o.connect(g).connect(dst);
+          o.start();
+          talk.mic = dst.stream;
+        } else if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          try {
+            talk.mic = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }, video: false });
+          } catch (e) {
+            talk.err = "Kein Mikrofon freigegeben: Du h\xF6rst die anderen, sie h\xF6ren dich nicht.";
+          }
+        } else talk.err = "Dieser Browser gibt hier kein Mikrofon her (nur auf der Website): Du h\xF6rst nur zu.";
+        talk.track = talk.mic ? talk.mic.getAudioTracks()[0] : null;
+        talk.micOff = false;
+        talk.on = true;
+      } catch (e) {
+        talk.err = "Sprechen l\xE4sst sich hier nicht starten.";
+      }
+      talk.busy = false;
+      if (SET.funk !== "an") talkOff();
+      talkInfo();
+    }
+    function talkOff() {
+      for (const id in talk.peers) talkClose(+id);
+      if (talk.mic) for (const t of talk.mic.getTracks()) t.stop();
+      talk.mic = talk.track = null;
+      talk.on = false;
+      talkInfo();
+    }
+    function talkApply() {
+      if (SET.funk === "an" && me.in !== "menu") talkOn();
+      else if (talk.on) talkOff();
+      talkInfo();
+    }
+    function talkKey() {
+      if (!talk.on || SET.mik === "taste") return;
+      talk.micOff = !talk.micOff;
+      note(talk.micOff ? "Mikrofon aus" : "Mikrofon an");
+      talkInfo();
+    }
+    function talkClose(id) {
+      const P = talk.peers[id];
+      if (!P) return;
+      delete talk.peers[id];
+      try {
+        P.pc.onicecandidate = P.pc.ontrack = P.pc.onconnectionstatechange = null;
+        P.pc.close();
+      } catch (e) {
+      }
+      if (P.src) try {
+        P.src.disconnect();
+        P.out.disconnect();
+      } catch (e) {
+      }
+      if (P.el) P.el.srcObject = null;
+    }
+    function talkPeer(id) {
+      const pc = new RTCPeerConnection({ iceServers: TALK_ICE }), P = talk.peers[id] = { id, pc, src: null, hp: null, lp: null, gain: null, pan: null, out: null, meter: null, el: null, at: performance.now(), ice: [], ready: false };
+      P.sender = pc.addTrack(talk.track || talk.quiet, talk.mic || new MediaStream([talk.quiet]));
+      P.sent = talk.track || talk.quiet;
+      pc.onicecandidate = (e) => {
+        if (e.candidate) netSay({ t: "v", to: id, k: "ice", d: e.candidate.toJSON() });
+      };
+      pc.ontrack = (e) => {
+        const C = talk.ctx, st = e.streams[0] || new MediaStream([e.track]);
+        P.el = new Audio();
+        P.el.muted = true;
+        P.el.srcObject = st;
+        P.src = C.createMediaStreamSource(st);
+        P.hp = C.createBiquadFilter();
+        P.hp.type = "highpass";
+        P.lp = C.createBiquadFilter();
+        P.lp.type = "lowpass";
+        P.gain = C.createGain();
+        P.gain.gain.value = 0;
+        P.pan = C.createStereoPanner ? C.createStereoPanner() : null;
+        P.meter = C.createAnalyser();
+        P.meter.fftSize = 512;
+        P.out = P.gain;
+        P.src.connect(P.hp).connect(P.lp).connect(P.gain);
+        P.gain.connect(P.meter);
+        if (P.pan) P.gain.connect(P.pan).connect(C.destination);
+        else P.gain.connect(C.destination);
+      };
+      pc.onconnectionstatechange = () => {
+        if (pc.connectionState === "failed") P.failed = performance.now();
+        talkInfo();
+      };
+      if (net.id < id) pc.createOffer().then((o) => pc.setLocalDescription(o)).then(() => netSay({ t: "v", to: id, k: "offer", d: pc.localDescription.toJSON() })).catch(() => {
+      });
+      return P;
+    }
+    function talkGot(from, d) {
+      if (d.to !== net.id || !talk.on || !d.d || typeof d.d !== "object") return;
+      let P = talk.peers[from];
+      if (d.k === "offer") {
+        if (P) talkClose(from);
+        P = talkPeer(from);
+        const pc = P.pc;
+        pc.setRemoteDescription(d.d).then(() => {
+          P.ready = true;
+          for (const c of P.ice.splice(0)) pc.addIceCandidate(c).catch(() => {
+          });
+          return pc.createAnswer();
+        }).then((a) => pc.setLocalDescription(a)).then(() => netSay({ t: "v", to: from, k: "answer", d: pc.localDescription.toJSON() })).catch(() => {
+        });
+      } else if (!P) return;
+      else if (d.k === "answer") P.pc.setRemoteDescription(d.d).then(() => {
+        P.ready = true;
+        for (const c of P.ice.splice(0)) P.pc.addIceCandidate(c).catch(() => {
+        });
+      }).catch(() => {
+      });
+      else if (d.k === "ice") {
+        if (P.ready) P.pc.addIceCandidate(d.d).catch(() => {
+        });
+        else if (P.ice.length < 40) P.ice.push(d.d);
+      }
+    }
+    function talkLevel(id) {
+      const P = talk.peers[id];
+      if (!P || !P.meter) return 0;
+      const b = talk.buf || (talk.buf = new Float32Array(512));
+      P.meter.getFloatTimeDomainData(b);
+      let q = 0;
+      for (let i = 0; i < b.length; i++) q += b[i] * b[i];
+      return Math.sqrt(q / b.length);
+    }
+    function talkStep(dt) {
+      if (G2.paused && (talk.infoT = (talk.infoT || 0) - dt) <= 0) {
+        talk.infoT = 1;
+        talkInfo();
+      }
+      if (!talk.on) return;
+      const now = performance.now(), C = talk.ctx, kart = me.in === "kart" && race.player, helmet = !!kart || foot.helm;
+      const mx = kart ? kart.x : foot.x, mz = kart ? kart.z : foot.z, fx = kart ? Math.cos(kart.th) : Math.sin(foot.yaw), fz = kart ? -Math.sin(kart.th) : Math.cos(foot.yaw);
+      const live = !!talk.track && (SET.mik === "taste" ? keys.has("KeyT") : !talk.micOff);
+      if (talk.track && talk.track.enabled !== live) talk.track.enabled = live;
+      for (const id in net.people) {
+        const p = net.people[id], P = talk.peers[id];
+        if (!p.vo) {
+          if (P) talkClose(+id);
+          continue;
+        }
+        if (!P) {
+          if (net.id < +id) talkPeer(+id);
+          continue;
+        }
+        if (P.failed && now - P.failed > 4000) {
+          talkClose(+id);
+          continue;
+        }
+        if (P.sent !== (talk.track || talk.quiet)) {
+          P.sent = talk.track || talk.quiet;
+          P.sender.replaceTrack(P.sent).catch(() => {
+          });
+        }
+        if (!P.gain) continue;
+        const ok = p.k && p.seat >= 0 ? race.karts[p.seat] : null, ox = ok ? ok.x : p.x, oz = ok ? ok.z : p.z, his = !!p.k || p.l === 1;
+        const dx = ox - mx, dz = oz - mz, dist = Math.hypot(dx, dz), near = dist < 2 ? 1 : Math.pow(clamp(1 - (dist - 2) / 16, 0, 1), 2);
+        let g = 0, lo = 80, hi = 14e3, pan = 0;
+        if (helmet && his) {
+          g = 0.9;
+          lo = 320;
+          hi = 3100;
+        } else {
+          g = near * (helmet || his ? 0.45 : 1);
+          if (helmet || his) hi = 900;
+          pan = dist > 0.3 ? clamp((dx * -fz + dz * fx) / dist, -1, 1) * 0.75 : 0;
+        }
+        if (talk.mute[p.name]) g = 0;
+        const t = C.currentTime;
+        P.gain.gain.setTargetAtTime(g, t, 0.08);
+        P.hp.frequency.setTargetAtTime(lo, t, 0.08);
+        P.lp.frequency.setTargetAtTime(hi, t, 0.08);
+        if (P.pan) P.pan.pan.setTargetAtTime(pan, t, 0.08);
+        P.g = g;
+      }
+    }
+    function talkInfo() {
+      const el = $2("p-funk-info"), row = $2("p-leute-row"), box = $2("p-leute");
+      if (!el) return;
+      const names = [];
+      for (const id in net.people) if (net.people[id].vo) names.push(net.people[id].name);
+      let n = 0;
+      for (const id in talk.peers) if (talk.peers[id].pc.connectionState === "connected") n++;
+      el.textContent = SET.funk !== "an" ? "Sprechen ist aus: Du h\xF6rst niemanden, niemand h\xF6rt dich."
+        : talk.err || (!talk.on ? "" : !net.on ? "Allein in der Halle: Niemand da zum Reden."
+          : (talk.track ? SET.mik === "taste" ? "Mikrofon: Taste T halten. " : talk.micOff ? "Mikrofon aus (Taste T). " : "Mikrofon an (Taste T schaltet es aus). " : "") + (names.length ? "Verbunden mit " + n + " von " + names.length + ". " : "Sonst hat gerade niemand Sprechen an. ") + "Mit Helm: Funk. Ohne Helm: nur in der N\xE4he.");
+      const sig = names.join("|") + "#" + names.map((nm) => talk.mute[nm] ? 1 : 0).join("");
+      if (sig !== talk.sigL) {
+        talk.sigL = sig;
+        row.hidden = !names.length;
+        box.textContent = "";
+        for (const nm of names) {
+          const b = document.createElement("button");
+          b.type = "button";
+          b.textContent = nm;
+          b.setAttribute("aria-pressed", String(!!talk.mute[nm]));
+          b.addEventListener("click", () => {
+            talk.mute[nm] = !talk.mute[nm];
+            talkInfo();
+          });
+          box.appendChild(b);
+        }
+      }
     }
     const allSat = () => {
       for (let i = 0; i < race.karts.length; i++) if (!seat(i).sat) return false;
@@ -12834,6 +13074,7 @@ void main(){
       }
       document.body.classList.toggle("t-keys", SET.touch === "tasten");
       applyHud();
+      talkApply();
       saveSettings();
     };
     applyHud();
@@ -13386,7 +13627,7 @@ void main(){
     $2("m-walk").textContent = "Halle betreten";
     attract();
     requestAnimationFrame(frame);
-    window.__ns = { guide, voice, voiceSay, stele, STELE, TERMS, LINK, linkAt, proj, flag, info, dash, models, gear, brief, deskOpen, deskClose, crew, crewCall, crewSeated, FIG, enterHall, leaveKart, footAct, foot, FOOT, SITE, PIT, setPit, startOutlap: meSit, startInlap: () => runSet("in"), hall, me, runSet, runStep, seat, holder, net, netOpen, netLeave, getOut, applyLook, LOOKS, G: G2, SET, race, audio, world, cam, camera, renderer, post, scene, track, models, beginRace, attract, setPaused, hud, fx, keys, AIDriver, HULL, HIT, KP, Kart, stepKart, steerLimit, FEELS, setFeel, rig, AHEAD, nextAhead, PHYS, setPhys, SEATS, setSeat, BACK, DEVICE, touch };
+    window.__ns = { talk, talkLevel, talkApply, guide, voice, voiceSay, stele, STELE, TERMS, LINK, linkAt, proj, flag, info, dash, models, gear, brief, deskOpen, deskClose, crew, crewCall, crewSeated, FIG, enterHall, leaveKart, footAct, foot, FOOT, SITE, PIT, setPit, startOutlap: meSit, startInlap: () => runSet("in"), hall, me, runSet, runStep, seat, holder, net, netOpen, netLeave, getOut, applyLook, LOOKS, G: G2, SET, race, audio, world, cam, camera, renderer, post, scene, track, models, beginRace, attract, setPaused, hud, fx, keys, AIDriver, HULL, HIT, KP, Kart, stepKart, steerLimit, FEELS, setFeel, rig, AHEAD, nextAhead, PHYS, setPhys, SEATS, setSeat, BACK, DEVICE, touch };
   }
   function buildEnv(renderer) {
     const THREE = window.THREE;
@@ -13451,6 +13692,8 @@ void main(){
     seg("p-gfx", "gfx", String);
     seg("p-ahead", "blick", String);
     seg("p-hud", "anzeige", String);
+    seg("p-funk", "funk", String);
+    seg("p-mik", "mik", String);
     seg("p-touch", "touch", String);
     for (const [ids, key] of [[["p-music"], "music"], [["p-sfx"], "sfx"]]) {
       const els = ids.map($2);
