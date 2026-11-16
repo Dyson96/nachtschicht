@@ -5,7 +5,7 @@
 <!-- Nachtschicht Grand Prix. (c) 2026. Alle Rechte vorbehalten. Kopieren, Veraendern, Weiterverbreiten und Einbetten nur mit schriftlicher Erlaubnis; siehe LICENSE.txt. -->
 <meta name="robots" content="noindex, nofollow">
 <script>(function(){var ok=["dyson96.github.io"],h=location.hostname,loc=h===""||h==="localhost"||h==="127.0.0.1"||h==="[::1]"||/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(h)||/\.local$/.test(h),own=loc||!ok.length||ok.indexOf(h)>=0,fr=false;try{fr=window.top!==window.self}catch(e){fr=true}if(!own||(fr&&!loc)){window.__LOCK=1;document.write('<meta charset="utf-8"><body style="margin:0;background:#050409;color:#ccd;font:16px/1.5 sans-serif;display:grid;place-items:center;height:100vh;text-align:center"><p>Nachtschicht Grand Prix l\u00e4uft nur auf seiner eigenen Adresse.<br><a style="color:#ff4fa0" href="https://dyson96.github.io/nachtschicht/">Zum Spiel</a></p></body>');document.close();if(window.stop)window.stop();}})();</script>
-<script>window.__BUILD="16.11.2026 22:24";</script>
+<script>window.__BUILD="17.11.2026 00:31";</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -2343,6 +2343,10 @@ body.touch .keys { display: none; }
             continue;
           }
           if (live && k.hold) continue;
+          if (k.out) {
+            k.u = k.v = k.r = 0;
+            continue;
+          }
           if (!live) {
             const t = k.input.throttle;
             k.input.throttle = 0;
@@ -2378,6 +2382,7 @@ body.touch .keys { display: none; }
           }
           for (let i = 0; i < ks.length; i++) {
             ks[i].touched = false;
+            if (ks[i].out) ks[i].u = ks[i].v = ks[i].r = 0;
             if (racing2) this.track_(ks[i]);
             else ks[i].prevS = ks[i].s;
           }
@@ -2409,6 +2414,10 @@ body.touch .keys { display: none; }
         if (d.resetWanted) this.putBack(d.k, d);
       }
       if (racing) {
+        if (this.host && !this.flagged && !this.demo && this.time > this.laps * Race.LAP_MAX) {
+          this.flagged = true;
+          this.events.push({ type: "flag" });
+        }
         this.slipstream();
         this.updateOrder();
         this.rubberBand();
@@ -2442,6 +2451,8 @@ body.touch .keys { display: none; }
         k.sync(tr);
         k.finished = false;
         k.finishTime = NaN;
+        k.fl = null;
+        k.out = false;
         k.y = 0;
         k.pitch = k.roll = k.u = k.v = k.r = 0;
         k.hold = true;
@@ -2488,8 +2499,7 @@ body.touch .keys { display: none; }
       this.linkOff();
       for (let i = 0; i < this.karts.length; i++) {
         const k = this.karts[i], bb = bays(i);
-        k.hold = false;
-        k.set = false;
+        k.hold = k.set = !!k.out;
         k.bx = bb.x;
         k.bz = bb.z;
         k.bth = bb.th;
@@ -2541,7 +2551,7 @@ body.touch .keys { display: none; }
         k.gx = o.x - Math.sin(o.th) * sl.d;
         k.gz = o.z - Math.cos(o.th) * sl.d;
         k.gth = o.th;
-        if (k.set) k.place(tr, k.gs, k.gd, 0);
+        if (k.set && !k.out) k.place(tr, k.gs, k.gd, 0);
       });
       this.order = order;
       this.qDone = true;
@@ -2684,6 +2694,7 @@ body.touch .keys { display: none; }
         if (this.host && !this.qDone) {
           let close = false, all = true;
           for (const k of this.karts) {
+            if (k.out) continue;
             if (k.q < 2) all = false;
             else if (!inPit(k) && k.s > L - 75 && k.s < L - 30) close = true;
           }
@@ -2842,7 +2853,7 @@ body.touch .keys { display: none; }
           }
           let dd = k.gd;
           if (far > 3) for (const q of this.karts) {
-            if (q === k || q.link) continue;
+            if (q === k || q.link || q.out) continue;
             let there;
             if (q.set) there = q.gs > k.s - 0.6 && q.gs < k.gs - 1 && Math.abs(q.gd - k.gd) < 1.3;
             else {
@@ -3142,8 +3153,8 @@ body.touch .keys { display: none; }
         k.prevS = k.s;
         k.progress = k.s - tr.L;
         k.wrong = 0;
-        k.hold = false;
-        k.set = false;
+        k.fl = null;
+        k.hold = k.set = !!k.out;
       }
       for (const d of this.ai) {
         d.capV = 0;
@@ -3217,9 +3228,10 @@ body.touch .keys { display: none; }
           k.lapStart = tCross;
           k.lapAuto = !!k.auto;
         }
-        if (!k.finished && k.lap > this.laps && !this.demo) {
+        if (!k.finished && (k.lap > this.laps || this.flagged) && !this.demo) {
           k.finished = true;
           k.finishTime = tCross;
+          k.fl = k.lap - 1;
           if (!this.flagged) {
             this.flagged = true;
             this.events.push({ type: "flag", k });
@@ -3281,13 +3293,9 @@ body.touch .keys { display: none; }
       }
     }
     updateOrder() {
-      const ks = this.karts.slice();
-      ks.sort((a, b) => {
-        if (a.finished && b.finished) return a.finishTime - b.finishTime;
-        if (a.finished) return -1;
-        if (b.finished) return 1;
-        return b.progress - a.progress;
-      });
+      const ks = this.karts.slice(), L = this.track.L, laps = this.laps;
+      const way = (k) => k.out ? -1e9 : k.finished ? (k.fl == null ? laps : k.fl) * L - k.finishTime * 1e-6 : k.progress;
+      ks.sort((a, b) => way(b) - way(a));
       this.order = ks;
       for (let i = 0; i < ks.length; i++) ks[i].pos = i + 1;
     }
@@ -3307,7 +3315,7 @@ body.touch .keys { display: none; }
     results() {
       const tr = this.track;
       const lead = this.order[0];
-      return this.order.map((k, i) => {
+      return this.order.filter((k) => !k.out).map((k, i) => {
         let t = k.finishTime;
         let est = false;
         if (!k.finished) {
@@ -3320,6 +3328,7 @@ body.touch .keys { display: none; }
       });
     }
   };
+  Race.LAP_MAX = 70;
 
   // src/gfx.js
   var T = () => window.THREE;
@@ -11009,6 +11018,7 @@ void main(){
       pit: [0, 0, 0], rec: [SET.rec, SET.recName] };
     const RELAY = "wss://nachtschicht.nachtschicht-gp.workers.dev";
     const RUN = hall.run;
+    const TAKT = { book: 60, board: 45, boardMax: 90, grid: 10, lap: 49, tail: 20, tailMax: 75, inn: 70, exit: 10, toGrid: [75, 160], outMax: 20, gearMax: 120, gearWait: 75, allein: false };
     const me = { in: "menu", seat: 0, run: 0, book: 0, idleT: 0, idleSaid: false, stuckT: 0 };
     status("Karts rollen aus der Box \u2026");
     await nextFrame();
@@ -11376,12 +11386,12 @@ void main(){
       if (!crew.on || !hall.host) return;
       if (!force) {
         if (crew.called) return;
-        for (let i = 0; i < race.karts.length; i++) if (!race.karts[i].human) if (crewFigure(i).state !== "wait") return;
+        for (let i = 0; i < race.karts.length; i++) if (!race.karts[i].human && !race.karts[i].out) if (crewFigure(i).state !== "wait") return;
       }
       crew.called = true;
       if (crew.pod) crew.pod.phase = "done";
       const order = [];
-      for (let i = 0; i < race.karts.length; i++) if (!race.karts[i].human) order.push(i);
+      for (let i = 0; i < race.karts.length; i++) if (!race.karts[i].human && !race.karts[i].out) order.push(i);
       order.sort((a, b) => Math.hypot(crewFigure(a).x + 12, crewFigure(a).z - 46) - Math.hypot(crewFigure(b).x + 12, crewFigure(b).z - 46));
       let turn = 0;
       for (const i of order) {
@@ -11424,7 +11434,7 @@ void main(){
     }
     const crewReady = () => {
       if (!crew.on) return true;
-      for (let i = 0; i < race.karts.length; i++) if (!race.karts[i].human && crewFigure(i).state !== "wait") return false;
+      for (let i = 0; i < race.karts.length; i++) if (!race.karts[i].human && !race.karts[i].out && crewFigure(i).state !== "wait") return false;
       return true;
     };
     const holder = (i) => {
@@ -11435,13 +11445,14 @@ void main(){
     };
     const seat = (i) => {
       const k = race.karts[i], h = k && k.human ? holder(i) : null;
+      if (k && k.out) return { booked: false, helm: false, sat: true, inKart: false, lies: 0, out: true };
       if (h) return { booked: h.booked, helm: h.lies === 1, sat: h.inKart && h.run === RUN.no, inKart: h.inKart, lies: h.lies };
       const sits = !crew.on || crewFigure(i).state === "seated";
       return { booked: true, helm: true, sat: sits, inKart: sits, lies: 0 };
     };
     const crewSeated = () => {
       if (!crew.on) return true;
-      for (let i = 0; i < race.karts.length; i++) if (!race.karts[i].human) if (crewFigure(i).state !== "seated") return false;
+      for (let i = 0; i < race.karts.length; i++) if (!race.karts[i].human && !race.karts[i].out) if (crewFigure(i).state !== "seated") return false;
       return true;
     };
     function crewUpdate(dt, time) {
@@ -11449,7 +11460,7 @@ void main(){
       for (let i = 0; i < race.karts.length; i++) if (!race.karts[i].human) {
         const f = crewFigure(i), k = race.karts[i];
         if (f.state === "off" || f.state === "seated") {
-          if (f.state === "seated" && race.state === "pit" && race.pitMode === "in" && k.set && (f.t += dt) > 1 + (i % 3) * 0.5) crewOut(i);
+          if (f.state === "seated" && race.state === "pit" && (race.pitMode === "in" && k.set || RUN.phase === "open" && race.pitMode === "out") && (f.t += dt) > 1 + (i % 3) * 0.5) crewOut(i);
           continue;
         }
         f.v = 0;
@@ -12248,10 +12259,10 @@ void main(){
       const res = brief.result && !crew.called ? brief.result : null;
       const STATE = { wait: "wartet", walk: "unterwegs", enter: "steigt ein", seated: "sitzt" };
       const rows = res ? res.map((r) => [r.pos + ".", r.name, r.best, r.color, false]) : race.karts.map((k, i) => [String(i + 1), k.driver.name,
-        k.human ? seat(i).sat ? "sitzt" : "fehlt noch" : crew.on ? STATE[crewFigure(i).state] || "" : "sitzt", k.driver.color, false]);
-      const all = !res && rows.every((r) => r[2] === "sitzt");
+        k.out ? "nicht dabei" : k.human ? seat(i).sat ? "sitzt" : "fehlt noch" : crew.on ? STATE[crewFigure(i).state] || "" : "sitzt", k.driver.color, false]);
+      const all = !res && rows.every((r) => r[2] === "sitzt" || r[2] === "nicht dabei");
       const FONT = SCREEN_FONT;
-      const sig = JSON.stringify([rows, hall.set.laps, hall.set.level, hall.set.quali, !!res, hall.call, guide.step, !!(document.fonts && document.fonts.check('700 30px "Chakra Petch"'))]);
+      const sig = JSON.stringify([rows, hall.set.laps, hall.set.level, hall.set.quali, !!res, hall.call, hall.next, guide.step, !!(document.fonts && document.fonts.check('700 30px "Chakra Petch"'))]);
       if (sig === brief.sig) return;
       brief.sig = sig;
       const g = brief.ctx;
@@ -12309,7 +12320,7 @@ void main(){
         g.fillText(r[0], 872, y);
         g.fillText(r[1], 940, y);
         g.textAlign = "right";
-        g.fillStyle = r[2] === "sitzt" ? "#5dffa2" : r[2] === "fehlt noch" ? "#ff2e88" : res ? "#c9d2e0" : "#ffc247";
+        g.fillStyle = r[2] === "sitzt" ? "#5dffa2" : r[2] === "fehlt noch" ? "#ff2e88" : r[2] === "nicht dabei" ? "#77808f" : res ? "#c9d2e0" : "#ffc247";
         g.fillText(r[2], 1552, y);
         g.textAlign = "left";
       });
@@ -12318,7 +12329,12 @@ void main(){
       if (hall.call) {
         g.fillStyle = "#ff2e88";
         g.font = "700 26px " + FONT;
-        g.fillText(hall.call, 848, 458, 704);
+        g.fillText(hall.call, 848, hall.next ? 440 : 458, 704);
+        if (hall.next) {
+          g.fillStyle = "#19e6ff";
+          g.font = "500 22px " + FONT;
+          g.fillText(hall.next, 848, 468, 704);
+        }
       } else g.fillText(res ? "Schnellste Runde je Fahrer." : all ? "Alle sitzen: Ausfahrt frei." : "Start, wenn alle im Kart sitzen.", 848, 458);
       brief.tex.needsUpdate = true;
     }
@@ -13258,7 +13274,7 @@ void main(){
     function boardDraw() {
       const W = 1200, H = 537, FONT = SCREEN_FONT, g = brief.board.ctx;
       const day = Object.keys(brief.day).map((n) => [n, brief.day[n]]).sort((a, b) => a[1] - b[1]).slice(0, 8);
-      const sig = JSON.stringify([brief.last, day, hall.rec, hall.set.laps, hall.set.opp, hall.call, !!(document.fonts && document.fonts.check('700 30px "Chakra Petch"'))]);
+      const sig = JSON.stringify([brief.last, day, hall.rec, hall.set.laps, hall.set.opp, hall.call, hall.next, !!(document.fonts && document.fonts.check('700 30px "Chakra Petch"'))]);
       if (sig === brief.bsig) return;
       brief.bsig = sig;
       g.setTransform(g.canvas.width / W, 0, 0, g.canvas.height / H, 0, 0);
@@ -13282,7 +13298,12 @@ void main(){
       if (hall.call) {
         g.fillStyle = "#ff2e88";
         g.font = "700 34px " + FONT;
-        g.fillText(hall.call, 1164, 76, 700);
+        g.fillText(hall.call, 1164, hall.next ? 62 : 76, 700);
+        if (hall.next) {
+          g.fillStyle = "#19e6ff";
+          g.font = "500 26px " + FONT;
+          g.fillText(hall.next, 1164, 98, 700);
+        }
       } else g.fillText("N\u00e4chster Lauf: " + hall.set.laps + " Runden \u00b7 " + (hall.set.opp + 1) + " Fahrer", 1164, 74);
       const col = (x, title, rows, none) => {
         g.textAlign = "left";
@@ -14178,6 +14199,229 @@ void main(){
       if (act.textContent !== what) act.textContent = what;
       act.classList.toggle("on", (foot.near ? !hallAsset || !!foot.helm && !!foot.booked : !!foot.at) && !foot.busy && !foot.desk);
     }
+    const NAV = { r: 0.44, pts: [], adj: null, walls: [], up: [], out: [-49, 60.6], foot: -1, top: -1 };
+    const navD2 = (px, pz, ax, az, bx, bz) => {
+      const dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz, t = l2 > 0 ? clamp(((px - ax) * dx + (pz - az) * dz) / l2, 0, 1) : 0;
+      const qx = ax + dx * t - px, qz = az + dz * t - pz;
+      return qx * qx + qz * qz;
+    };
+    const navTurn = (px, pz, qx, qz, rx, rz) => (qx - px) * (rz - pz) - (qz - pz) * (rx - px);
+    const navCross = (ax, az, bx, bz, cx, cz, dx, dz) => navTurn(cx, cz, dx, dz, ax, az) > 0 !== navTurn(cx, cz, dx, dz, bx, bz) > 0 && navTurn(ax, az, bx, bz, cx, cz) > 0 !== navTurn(ax, az, bx, bz, dx, dz) > 0;
+    const navSeg = (ax, az, bx, bz, cx, cz, dx, dz) => navCross(ax, az, bx, bz, cx, cz, dx, dz) ? 0 : Math.sqrt(Math.min(navD2(ax, az, cx, cz, dx, dz), navD2(bx, bz, cx, cz, dx, dz), navD2(cx, cz, ax, az, bx, bz), navD2(dx, dz, ax, az, bx, bz)));
+    function navFree(ax, az, bx, bz, y, r) {
+      const feet = y + 0.25, head = y + 1.75;
+      for (const g of SITE.segs) if (!(feet >= g[5] || head <= g[4]) && navSeg(ax, az, bx, bz, g[0], g[1], g[2], g[3]) < g[6] + r) return false;
+      for (const g of y < 2 ? NAV.walls : NAV.up) if (navSeg(ax, az, bx, bz, g[0], g[1], g[2], g[3]) < 0.1 + r) return false;
+      for (const q of SITE.blocks) {
+        if (feet >= q[5] || head <= q[4] || q[6] === "podest") continue;
+        const x0 = q[0] - r, z0 = q[1] - r, x1 = q[2] + r, z1 = q[3] + r;
+        if (Math.max(ax, bx) < x0 || Math.min(ax, bx) > x1 || Math.max(az, bz) < z0 || Math.min(az, bz) > z1) continue;
+        if (ax > x0 && ax < x1 && az > z0 && az < z1 || bx > x0 && bx < x1 && bz > z0 && bz < z1) return false;
+        if (navCross(ax, az, bx, bz, x0, z0, x1, z0) || navCross(ax, az, bx, bz, x1, z0, x1, z1) || navCross(ax, az, bx, bz, x1, z1, x0, z1) || navCross(ax, az, bx, bz, x0, z1, x0, z0)) return false;
+      }
+      if (y < 2.3) for (const o of world.obstacles) if (navD2(o[0], o[1], ax, az, bx, bz) < (o[2] + r) * (o[2] + r)) return false;
+      return true;
+    }
+    function navInit() {
+      const F1 = SITE.F1, P = NAV.pts, st = SITE.stair, L = SITE.lobby, sx = (st.x0 + st.x1) / 2;
+      const add = (y, list) => { for (const q of list) P.push([q[0], q[1], y]); };
+      NAV.walls = [[SITE.X0, SITE.ZS + 0.15, L.door[0], SITE.ZS + 0.15], [L.door[1], SITE.ZS + 0.15, SITE.X1, SITE.ZS + 0.15]];
+      NAV.up = [[st.x0, st.zTop + 0.25, st.x1, st.zTop + 0.25]];
+      add(0, [NAV.out, [-49, 57.2], [-49, 55.2], [-46.2, 55.2], [-46.2, 51.5], [-46.2, 47.6], [-53, 51], [-56, 55.5], [-56, 47.8], [-41.3, 57.15],
+        [-38.5, 47.6], [-34, 47.6], [-30.8, 47.6], [-29, 47.6], [-26, 47.6], [-30.8, 52.5], [-27, 54.6], [-34.5, 54.6],
+        [-21, 47.6], [-17.3, 47.6], [-12, 47.6], [-21.2, 52.5], [-17.3, 53], [-15, 53], [-15, 48.8], [-11.5, 53],
+        [-45, 44.8], [-34, 44.8], [-29, 44.8], [-20.5, 44.8], [-12, 44.8], [-5, 44.8], [3, 44]]);
+      NAV.foot = P.push([sx, st.zBot + 0.8, 0]) - 1;
+      NAV.top = P.push([sx, st.zTop - 0.7, F1]) - 1;
+      add(F1, [[-58, 49.6], [-51, 49.6], [-43, 49.6], [-34.5, 49.6], [-28, 49.6], [-20, 49.6], [-8, 49.6], [5, 49.6],
+        [-58, 54.6], [-51, 54.6], [-43, 54.6], [-34.5, 54.6], [-28, 54.6], [-21, 54.2], [-8, 54.2], [5, 54.6], [-41.5, 57.4], [-35.5, 57.4],
+        [-49, 46], [-25, 46], [-1, 46], [-56, 44.8], [-49, 44.8], [-38, 44.8], [-25, 44.8], [-13, 44.8], [-1, 44.8], [8, 44.8]]);
+      const n = P.length;
+      NAV.adj = P.map(() => []);
+      for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) {
+        const a = P[i], b = P[j], d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+        if (Math.abs(a[2] - b[2]) > 0.5 || d > 18 || !navFree(a[0], a[1], b[0], b[1], a[2], NAV.r)) continue;
+        NAV.adj[i].push([j, d]);
+        NAV.adj[j].push([i, d]);
+      }
+      NAV.adj[NAV.foot].push([NAV.top, 12]);
+      NAV.adj[NAV.top].push([NAV.foot, 12]);
+    }
+    function navWay(a, b) {
+      if (!NAV.adj) navInit();
+      const P = NAV.pts, n = P.length, st = SITE.stair;
+      if (Math.abs(a[2] - b[2]) < 1 && navFree(a[0], a[1], b[0], b[1], a[2], 0.25)) return [b.slice()];
+      const dist = new Array(n).fill(1e9), prev = new Array(n).fill(-1), done = new Array(n).fill(false), end = new Array(n).fill(-1);
+      const reach = (q, into, r) => {
+        let any = false, near = -1, nd = 1e9;
+        if (q[0] > st.x0 && q[0] < st.x1 && q[1] > st.zTop && q[1] < st.zBot) {
+          into[NAV.foot] = Math.hypot(q[0] - P[NAV.foot][0], q[1] - P[NAV.foot][1]) * 3;
+          into[NAV.top] = Math.hypot(q[0] - P[NAV.top][0], q[1] - P[NAV.top][1]) * 3;
+          return;
+        }
+        for (let i = 0; i < n; i++) {
+          if (Math.abs(P[i][2] - q[2]) > 1) continue;
+          const d = Math.hypot(q[0] - P[i][0], q[1] - P[i][1]);
+          if (d < nd) nd = d, near = i;
+          if (navFree(q[0], q[1], P[i][0], P[i][1], q[2], r)) into[i] = d, any = true;
+        }
+        if (!any && near >= 0) into[near] = nd;
+      };
+      reach(a, dist, 0.25);
+      reach(b, end, NAV.r - 0.08);
+      for (let k = 0; k < n; k++) {
+        let i = -1;
+        for (let j = 0; j < n; j++) if (!done[j] && dist[j] < 1e9 && (i < 0 || dist[j] < dist[i])) i = j;
+        if (i < 0) break;
+        done[i] = true;
+        for (const e of NAV.adj[i]) if (dist[i] + e[1] < dist[e[0]]) dist[e[0]] = dist[i] + e[1], prev[e[0]] = i;
+      }
+      let best = -1;
+      for (let i = 0; i < n; i++) if (end[i] >= 0 && dist[i] < 1e9 && (best < 0 || dist[i] + end[i] < dist[best] + end[best])) best = i;
+      if (best < 0) return [b.slice()];
+      const way = [];
+      for (let i = best; i >= 0; i = prev[i]) way.unshift(P[i].slice());
+      way.push(b.slice());
+      const out = [];
+      let cur = a;
+      for (let i = 0; i < way.length; i++) {
+        let j = i;
+        for (let k = way.length - 1; k > i; k--) if (Math.abs(way[k][2] - cur[2]) < 0.5 && navFree(cur[0], cur[1], way[k][0], way[k][1], cur[2], NAV.r)) { j = k; break; }
+        out.push(way[j]);
+        cur = way[j];
+        i = j;
+      }
+      return out;
+    }
+    function footLead(why, exit) {
+      if (me.in !== "foot" || foot.busy || foot.go || foot.out > 0 || why === "back" && !(me.seat >= 0)) return false;
+      if (foot.desk) deskClose();
+      const to = why === "back" ? [SITE.helm.slots[me.seat][0], 55.95, 0] : [NAV.out[0], NAV.out[1], 0];
+      foot.lead = { why, exit: !!exit, pts: navWay([foot.x, foot.z, foot.y], to), to, pi: 0, t: 0, chk: 0, cx: foot.x, cz: foot.z, n: 0 };
+      return true;
+    }
+    function footArrive(L) {
+      foot.lead = null;
+      foot.vx = foot.vz = 0;
+      if (L.why === "back") {
+        foot.helm = foot.back = false;
+        audio.beep(440, 0.05, 0.12, "triangle");
+        footSay("Deine Ausr\xFCstung liegt wieder in deinem Fach.", 5);
+        if (L.exit) footLead("exit");
+      } else {
+        net.lost = "Die Halle hat dich zur T\xFCr gebracht.";
+        attract();
+      }
+    }
+    function meClock(dt) {
+      if (RUN.kind !== "visit" || !hallAsset || me.in === "menu") return;
+      const strict = netBusy() || TAKT.allein;
+      if (strict && me.in === "kart" && RUN.phase === "open" && me.run < RUN.no && !me.stay) {
+        me.outT = (me.outT || 0) + dt;
+        if (me.outT > TAKT.outMax) {
+          me.outT = 0;
+          getOut();
+          footSay("Dein Lauf ist vorbei: Bitte die Ausr\xFCstung zur\xFCck ins Fach.", 6);
+        }
+      } else me.outT = 0;
+      const need = foot.booked && (!net.on || me.book >= RUN.no);
+      if (strict && me.in === "foot" && foot.helm && !need && !foot.lead && me.seat >= 0) {
+        me.gearT = (me.gearT || 0) + dt;
+        const max = TAKT.gearMax;
+        if (me.gearT > max - 30 && !me.gearSaid) {
+          me.gearSaid = true;
+          if (!voiceSay("frist_ausruestung", "helm", { now: true })) footSay("Bitte bring deine Ausr\xFCstung zur\xFCck in dein Fach.", 6);
+        }
+        if (me.gearT > max && footLead("back")) footSay("Die Halle bringt dich zu deinem Fach.", 5);
+      } else if (!foot.lead) {
+        me.gearT = 0;
+        me.gearSaid = false;
+      }
+    }
+    const ghosts = {};
+    const ghostGear = (i) => {
+      for (const id in ghosts) if (ghosts[id].gear && ghosts[id].seat === i) return true;
+      return false;
+    };
+    function ghostEnd(id) {
+      const g = ghosts[id];
+      if (!g) return;
+      crewShow(g.fig, false);
+      delete ghosts[id];
+    }
+    function ghostStep(dt, time) {
+      const now = performance.now();
+      for (const id in ghosts) {
+        const g = ghosts[id], f = g.fig;
+        if (hall.host) {
+          if (!g.pts) {
+            const at = [g.x, g.z, g.y], bay = g.gear && g.seat >= 0 ? [SITE.helm.slots[g.seat][0], 55.95, 0] : null, out = [NAV.out[0], NAV.out[1], 0];
+            g.pts = bay ? navWay(at, bay).concat([null], navWay(bay, out)) : navWay(at, out);
+            g.pi = 0;
+            g.gear = !!bay;
+          }
+          const q = g.pts[g.pi];
+          g.v = 0;
+          if (g.wait > 0) g.wait -= dt;
+          else if (q === null) {
+            g.gear = false;
+            g.wait = 1.6;
+            g.pi++;
+          } else if (!q) {
+            ghostEnd(id);
+            continue;
+          } else {
+            const dx = q[0] - g.x, dz = q[1] - g.z, d = Math.hypot(dx, dz);
+            if (d < 0.2) g.pi++;
+            else {
+              const turn = wrapAngle(Math.atan2(-dz, dx) - g.th), stp = SITE.stepAt(g.x, g.z, g.y);
+              g.th += clamp(turn, -5 * dt, 5 * dt);
+              g.v = (stp && stp[3] > 0 ? FOOT.stWalk : FOOT.walk) * clamp(1.4 - Math.abs(turn), 0.25, 1) * Math.min(1, d / 0.4 + 0.3);
+              const st = Math.min(g.v * dt, d);
+              g.x += Math.cos(g.th) * st;
+              g.z -= Math.sin(g.th) * st;
+            }
+            const h = SITE.floorAt(g.x, g.z, g.y);
+            g.y = h > g.y ? Math.min(h, g.y + 6 * dt + (h - g.y) * (1 - Math.exp(-18 * dt))) : Math.max(h, g.y - 7 * dt);
+          }
+          if ((g.t += dt) > 240) {
+            ghostEnd(id);
+            continue;
+          }
+        } else {
+          const a = net.L ? net.L[id] : null;
+          if (Array.isArray(a) && a.length >= 6) {
+            const w = 1 - Math.exp(-dt / 0.1);
+            g.at = now;
+            g.x += (num(a[0]) - g.x) * w;
+            g.z += (num(a[1]) - g.z) * w;
+            g.y = num(a[2]);
+            g.th += wrapAngle(num(a[3]) - g.th) * Math.min(1, dt * 12);
+            g.v = num(a[4]);
+            g.gear = !!a[5];
+          } else if (now - g.at > 2500) {
+            ghostEnd(id);
+            continue;
+          }
+        }
+        f.x = g.x;
+        f.z = g.z;
+        f.y = g.y;
+        f.th = g.th;
+        f.v = g.v;
+        f.crouch = 0;
+        f.phase += g.v * dt * (TAU / 1.45);
+        if (f.fig) {
+          const o = g.gear ? "renn" : "alltag";
+          if (f.fig.outfit !== o) FG.setOutfit(f.fig, o);
+        } else if (f.helm) {
+          f.helm.visible = g.gear;
+          f.head.visible = !g.gear;
+        }
+        crewShow(f, true);
+        poseFigure(f, dt, time);
+      }
+    }
     const gear = { made: false, shelf: null, rack: null, chg: null, lab: [], rk: [], dis: [], lamp: [], helm: [], back: [], sigS: "", sigR: "", sigC: "", deny: -1, denyT: 0 };
     function gearInit() {
       gear.made = true;
@@ -14319,23 +14563,23 @@ void main(){
       for (let b = 0; b < 8; b++) C.push(null);
       for (let i = 0; i < 8; i++) {
         const k = i < n ? ks[i] : null, q = k ? seat(i) : null, h = k ? holder(i) : null;
-        const lies = h ? h.lies : 0, named = !!h && (h.booked || lies !== 0);
+        const lies = h ? h.lies : 0, named = !!h && (h.booked || lies !== 0), away = lies === 1 || ghostGear(i);
         S.push([k ? hexOf(k.driver.color) : "", named ? h.name : ""]);
-        gear.helm[i].visible = lies !== 1;
-        if (gear.kit) gear.kit[i].visible = lies !== 1;
+        gear.helm[i].visible = !away;
+        if (gear.kit) gear.kit[i].visible = !away;
         const free = !!h && h.booked, no = gear.deny === i && gear.denyT > 0 && (guide.t * 6 | 0) % 2 === 0;
-        const a = free && lies !== 1 ? 1 : !!h && !h.booked && lies === 1 && !h.inKart ? 0.6 : 0;
+        const a = free && !away ? 1 : !!h && !h.booked && lies === 1 && !h.inKart ? 0.6 : 0;
         const dimA = named ? 0.62 : 0.3;
         gear.lab[i].material.color.setRGB(no ? 3.2 : a ? 0.45 + 0.5 * beat * a : dimA, no ? 0.25 : a ? 0.7 + 1.9 * beat * a : dimA, no ? 0.15 : a ? 0.4 + 0.35 * beat * a : dimA);
         if (k) {
           const b = k.home % 8, open = ph === "open";
-          const who = open ? h ? h.booked ? h.name : "" : k.driver.name : k.human && h ? h.name : k.driver.name;
-          const st = open ? h && !h.booked ? "FREI" : "ANGEMELDET" : ph === "board" ? q.sat ? "BEREIT" : "FAHRER FEHLT" : ph === "in" ? k.set ? "L\xC4DT" : "KOMMT REIN" : "AUF DER BAHN";
+          const who = k.out ? "" : open ? h ? h.booked ? h.name : "" : k.driver.name : k.human && h ? h.name : k.driver.name;
+          const st = k.out ? "L\xC4DT" : open ? h && !h.booked ? "FREI" : "ANGEMELDET" : ph === "board" ? q.sat ? "BEREIT" : "FAHRER FEHLT" + (netBusy() && RUN.wait < TAKT.boardMax ? " " + mmss(Math.ceil(TAKT.boardMax - RUN.wait)) : "") : ph === "in" ? k.set ? "L\xC4DT" : "KOMMT REIN" : "AUF DER BAHN";
           C[b] = [String(i + 1), hexOf(k.driver.color), who, st];
         }
       }
       for (let b = 0; b < 8; b++) {
-        const c = C[b], on = !!c && (c[3] === "FAHRER FEHLT" || c[3] === "KOMMT REIN");
+        const c = C[b], on = !!c && (c[3].indexOf("FAHRER FEHLT") === 0 || c[3] === "KOMMT REIN");
         gear.lamp[b].visible = on && tick;
       }
       const fonts = !!(document.fonts && document.fonts.check('700 30px "Chakra Petch"'));
@@ -14382,7 +14626,7 @@ void main(){
           g.fillStyle = "#e8f4ff";
           g.font = "600 38px " + FONT;
           g.fillText(c[2].toUpperCase(), x + 128, y + 188, 240);
-          g.fillStyle = c[3] === "FAHRER FEHLT" || c[3] === "KOMMT REIN" ? "#b8ff3a" : c[3] === "FREI" ? "#8d98ab" : "#35d8ff";
+          g.fillStyle = c[3].indexOf("FAHRER FEHLT") === 0 || c[3] === "KOMMT REIN" ? "#b8ff3a" : c[3] === "FREI" ? "#8d98ab" : "#35d8ff";
           g.font = "600 30px " + FONT;
           g.fillText(c[3], x + 128, y + 234, 240);
         }
@@ -14440,7 +14684,7 @@ void main(){
       footHint();
     }
     function footAct() {
-      if (G2.state !== "foot" || G2.paused || foot.busy || foot.go || foot.out) return;
+      if (G2.state !== "foot" || G2.paused || foot.busy || foot.go || foot.out || foot.lead) return;
       if (foot.desk) return deskClose();
       if (!foot.near) {
         if (foot.at === "desk") deskOpen();
@@ -14459,6 +14703,11 @@ void main(){
           gear.denyT = 1.4;
           audio.beep(196, 0.16, 0.14, "square");
           voiceSay("erst_checkin", "raum", { at: STELE.ausruestung, now: true });
+        } else if (foot.at === "helm" && ghostGear(me.seat)) {
+          gear.deny = me.seat;
+          gear.denyT = 1.4;
+          audio.beep(196, 0.16, 0.14, "square");
+          footSay("Deine Ausr\xFCstung kommt gleich: Dein Vorg\xE4nger bringt sie gerade zur\xFCck.", 5);
         } else if (foot.at === "helm" || foot.at === "back") {
           foot.helm = foot.at === "helm";
           foot.back = false;
@@ -14471,7 +14720,7 @@ void main(){
         return;
       }
       if (hallAsset && (!foot.helm || !foot.booked)) return;
-      if (net.on && !(race.player && me.book === RUN.no && (hall.host ? RUN.phase === "open" || RUN.phase === "board" : RUN.phase === "board" && race.player.human))) return;
+      if (net.on && !(race.player && me.book === RUN.no && (hall.host && !netBusy() ? RUN.phase === "open" || RUN.phase === "board" : RUN.phase === "board" && race.player.human))) return;
       runHurry();
       if (meFig && hallAsset) {
         const sp = boardSpot(race.player, [foot.x, foot.z]);
@@ -14622,7 +14871,8 @@ void main(){
       net.ws = null;
       net.on = false;
       net.cnt = 0;
-      for (const id in net.people) netGone(+id);
+      for (const id in net.people) netGone(+id, true);
+      for (const id in ghosts) ghostEnd(id);
       if (guest) {
         net.lost = "Verbindung zur Halle verloren.";
         hall.host = race.host = true;
@@ -14641,7 +14891,8 @@ void main(){
       const ws = net.ws;
       net.ws = null;
       net.on = false;
-      for (const id in net.people) netGone(+id);
+      for (const id in net.people) netGone(+id, true);
+      for (const id in ghosts) ghostEnd(id);
       hall.host = race.host = true;
       net.id = net.hostId = 0;
       net.off = 0;
@@ -14735,10 +14986,13 @@ void main(){
       }
       if (p.seat >= 0 && d.K) kartTake(race.karts[p.seat], d.K);
     }
-    function netGone(id) {
+    function netGone(id, mine) {
       const p = net.people[id];
       if (!p) return;
-      if (p.fig) crewShow(p.fig, false);
+      if (p.fig && !mine && !p.k && !p.first && RUN.kind === "visit" && hallAsset && me.in !== "menu" && id !== net.hostId) {
+        if (ghosts[id]) ghostEnd(id);
+        ghosts[id] = { fig: p.fig, x: p.x, z: p.z, y: p.y, th: p.fig.th, v: 0, gear: p.l === 1, seat: p.seat, pts: null, pi: 0, t: 0, wait: 0, at: performance.now() };
+      } else if (p.fig) crewShow(p.fig, false);
       talkClose(id);
       delete net.people[id];
       if (hall.host) for (let i = 0; i < hall.seats.length; i++) if (hall.seats[i] === id) seatFree(i);
@@ -14749,6 +15003,7 @@ void main(){
       if (!k) return;
       k.net = null;
       k.own = true;
+      if (k.human && RUN.kind === "visit" && RUN.phase === "board" && !k.out) return seatOut(i);
       if (k.human) {
         k.human = false;
         k.driver = DRIVERS[i % DRIVERS.length];
@@ -14759,6 +15014,26 @@ void main(){
           f.state = out ? "seated" : "wait";
           models[i].setDriver(out);
           crewShow(f, !out);
+        }
+      }
+    }
+    function seatOut(i) {
+      const k = race.karts[i], id = hall.seats[i], p = id >= 0 && id !== net.id ? net.people[id] : null;
+      if (!k) return;
+      if (p) p.drop = RUN.no;
+      k.human = k.isPlayer = false;
+      k.own = true;
+      k.net = null;
+      k.out = k.hold = k.set = true;
+      k.u = k.v = k.r = 0;
+      if (k.auto) k.auto = k.autoFin = false;
+      models[i].setDriver(false);
+      if (i === me.seat && id === (net.on ? net.id : hall.seats[i])) {
+        if (me.in === "kart") getOut();
+        if (foot.booked && me.book === RUN.no) {
+          foot.booked = false;
+          me.book = 0;
+          note("Lauf " + RUN.no + " f\xE4hrt ohne dich. Melde dich f\xFCr den n\xE4chsten an.");
         }
       }
     }
@@ -14815,7 +15090,7 @@ void main(){
             crew.list[i].state = "off";
           }
         } else {
-          const was = k.human;
+          const was = k.human || k.out;
           k.human = false;
           k.own = true;
           k.net = null;
@@ -14845,12 +15120,17 @@ void main(){
           F[i] = [N3(f.x), N3(f.z), N3(f.y), N3(f.th), N3(f.v), N3(f.crouch), f.state];
         }
       }
+      let L = null;
+      for (const id in ghosts) {
+        const g = ghosts[id];
+        (L || (L = {}))[id] = [N3(g.x), N3(g.z), N3(g.y), N3(g.th), N3(g.v), g.gear ? 1 : 0];
+      }
       return {
         t: "h", no: RUN.no, ph: PH.indexOf(RUN.phase), set: [SET.laps, SET.quali === "ohne" ? 0 : 1, SET.opp, SET.level],
         seats: hall.seats.slice(0, ks.length), names: ks.map((k) => k.driver.name), hum: ks.map((k) => k.human ? 1 : 0), home: ks.map((k) => k.home), slot: ks.map((k) => k.slot),
         r: [race.pitHold ? 1 : 0, race.qDone ? 1 : 0, race.formed ? 1 : 0, race.parkedAll ? 1 : 0, race.pitOut ? 1 : 0, race.entryOpen ? 1 : 0, race.flagged ? 1 : 0, race.quali ? 1 : 0],
         pit: hall.pit, link: [LINK.wantIn ? 1 : 0, LINK.wantOut ? 1 : 0, LINK.on ? 1 : 0, LINK.wantBlade ? 1 : 0], fin: race.final || null, go: RUN.lights || null,
-        w: N3(RUN.wait), pod: crew.pod ? [crew.pod.phase, crew.pod.top] : null, br: [guide.brief > 0 ? 1 : 0, guide.step], day: brief.day, rec: [SET.rec, SET.recName], K, F
+        w: N3(RUN.wait), pt: N3(RUN.t), out: ks.map((k) => k.out ? 1 : 0), off: hall.off | 0, L, pod: crew.pod ? [crew.pod.phase, crew.pod.top] : null, br: [guide.brief > 0 ? 1 : 0, guide.step], day: brief.day, rec: [SET.rec, SET.recName], K, F
       };
     }
     function netHall(H) {
@@ -14884,6 +15164,7 @@ void main(){
           crewInit();
           RUN.phase = "open";
           setPit(false, false, false);
+          hall.off = H.off | 0;
         }
         race.ai.length = 0;
         if (race.pitDrivers) race.pitDrivers.length = 0;
@@ -14932,7 +15213,7 @@ void main(){
       const ahead = RUN.no === no && RUN.phase === "race" && want === "grid";
       while (!ahead && (RUN.no !== no || RUN.phase !== want) && guard++ < 14) {
         const at = PH.indexOf(RUN.phase);
-        if (RUN.phase === "in" || RUN.no > no) {
+        if (RUN.phase === "in" || RUN.no > no || RUN.no < no && (RUN.phase === "open" || RUN.phase === "board")) {
           RUN.no = RUN.phase === "in" && RUN.no < no ? RUN.no + 1 : no;
           runSet("open");
         } else if (RUN.phase === "grid") {
@@ -14940,8 +15221,14 @@ void main(){
           runSet("race");
         } else runSet(PH[at + 1]);
       }
+      if ((H.off | 0) > (hall.off | 0)) {
+        hall.off = H.off | 0;
+        voiceSay("lauf_abgesagt", "halle");
+      }
       RUN.quiet = false;
-      if (RUN.phase === "open") RUN.wait = num(H.w);
+      if (RUN.phase === "open" || RUN.phase === "board") RUN.wait = num(H.w);
+      if (typeof H.pt === "number" && Math.abs(H.pt - RUN.t) > 1.5) RUN.t = num(H.pt);
+      for (let i = 0; i < n; i++) race.karts[i].out = !!(Array.isArray(H.out) && H.out[i]);
       if (race.state === "pit") {
         race.pitHold = !!H.r[0];
         race.qDone = !!H.r[1];
@@ -14964,6 +15251,7 @@ void main(){
       RUN.lights = Array.isArray(H.go) && H.go.length === 2 ? [num(H.go[0]), num(H.go[1])] : null;
       if (H.K && typeof H.K === "object") for (const i in H.K) kartTake(race.karts[i | 0], H.K[i]);
       net.F = H.F && typeof H.F === "object" ? H.F : null;
+      net.L = H.L && typeof H.L === "object" ? H.L : null;
       if (Array.isArray(H.pod) && Array.isArray(H.pod[1])) crew.pod = { phase: String(H.pod[0]), t: 0, end: 1e9, up: true, top: H.pod[1].map((v) => v | 0) };
       else crew.pod = null;
       if (Array.isArray(H.br)) {
@@ -15547,6 +15835,8 @@ void main(){
       RUN.phase = phase;
       RUN.t = 0;
       RUN.flagT = 0;
+      RUN.flagW = 0;
+      RUN.said = false;
       RUN.wait = 0;
       if (phase === "open") setPit(false, false, false);
       else if (phase === "board") {
@@ -15601,8 +15891,8 @@ void main(){
         race.pitIn(SITE.pit, bay);
         if (hall.host || !race.final) race.final = race.karts.map((k) => k.pos);
         crew.called = false;
-        crew.pod = crew.on && race.karts.length > 3 ? { phase: "gather", t: 0, end: 0, up: false, top: [1, 2, 3].map((p) => race.final.indexOf(p)) } : null;
-        brief.result = brief.last = race.karts.map((k, i) => ({ pos: race.final ? race.final[i] : k.pos, name: k.driver.name, best: isFinite(k.best) ? fmtTime(k.best) : "–", color: k.driver.color, seat: i })).sort((a, b) => a.pos - b.pos);
+        crew.pod = crew.on && race.karts.filter((k) => !k.out).length > 3 ? { phase: "gather", t: 0, end: 0, up: false, top: [1, 2, 3].map((p) => race.final.indexOf(p)) } : null;
+        brief.result = brief.last = race.karts.map((k, i) => ({ pos: race.final ? race.final[i] : k.pos, name: k.driver.name, best: isFinite(k.best) ? fmtTime(k.best) : "–", color: k.driver.color, seat: i, out: !!k.out })).filter((r) => !r.out).sort((a, b) => a.pos - b.pos);
         if (hall.host) for (const k of race.karts) if (isFinite(k.best) && k.best > 0 && !(SET.rec > 0 && SET.rec <= k.best)) {
           SET.rec = k.best;
           SET.recName = k.driver.name;
@@ -15620,12 +15910,28 @@ void main(){
         }
       }
     }
+    const mmss = (sec) => Math.floor(sec / 60) + ":" + String(Math.floor(sec % 60)).padStart(2, "0");
+    const etwa = (sec) => mmss(Math.ceil(Math.max(0, sec) / 10) * 10);
+    function runRest() {
+      const ph = RUN.phase, t = RUN.t, toGrid = TAKT.toGrid[hall.set.quali !== "ohne" ? 1 : 0], raceT = hall.set.laps * TAKT.lap + 6;
+      const left = (typ) => Math.max(typ - t, Math.min(15, typ * 0.2));
+      if (ph === "open") return 0;
+      if (ph === "board") return left(TAKT.board) + toGrid + TAKT.grid + raceT + TAKT.tail + TAKT.inn;
+      if (ph === "out") return left(toGrid) + TAKT.grid + raceT + TAKT.tail + TAKT.inn;
+      if (ph === "grid") return left(TAKT.grid) + raceT + TAKT.tail + TAKT.inn;
+      if (ph === "race") {
+        if (race.flagged) return Math.max(5, TAKT.tail - (RUN.flagW || 0)) + TAKT.inn;
+        const lead = race.order[0], done = lead ? clamp(lead.progress / (hall.set.laps * track.L), 0, 1) : 0;
+        return Math.max(8, raceT * (1 - done)) + TAKT.tail + TAKT.inn;
+      }
+      return left(TAKT.inn);
+    }
     function runCall() {
       if (RUN.kind !== "visit" || !hallAsset) return "";
-      const R = "LAUF " + RUN.no + " \xB7 ", ph = RUN.phase, n = race.karts.length;
+      const R = "LAUF " + RUN.no + " \xB7 ", ph = RUN.phase, n = race.karts.length, company = netBusy();
       if (ph === "open") {
         if (brief.result && crew.pod && crew.pod.phase !== "done") return "SIEGEREHRUNG AM PODEST";
-        if (RUN.wait > 0.5 && RUN.wait < 45) return R + "AUFRUF IN 0:" + String(Math.ceil(45 - RUN.wait)).padStart(2, "0");
+        if (company && RUN.wait > 0.5 && RUN.wait < TAKT.book) return R + "CHECK-IN SCHLIESST IN " + mmss(Math.ceil(TAKT.book - RUN.wait));
         for (let i = 0; i < n; i++) {
           const h = holder(i);
           if (h && h.booked && h.lies !== 1) return R + "FAHRER ZUR AUSR\xDCSTUNG";
@@ -15633,13 +15939,23 @@ void main(){
         return R + "CHECK-IN GE\xD6FFNET";
       }
       if (ph === "board") {
-        for (let i = 0; i < n; i++) if (race.karts[i].human && seat(i).sat) return R + "FAHRER STEIGEN EIN";
-        return R + "FAHRER ZU DEN KARTS";
+        const left = company && RUN.wait < TAKT.boardMax ? " \xB7 NOCH " + mmss(Math.ceil(TAKT.boardMax - RUN.wait)) : "";
+        for (let i = 0; i < n; i++) if (race.karts[i].human && seat(i).sat) return R + "FAHRER STEIGEN EIN" + left;
+        return R + "FAHRER ZU DEN KARTS" + left;
       }
-      if (ph === "out") return R + (!race.pitOut ? "BOXENAUSFAHRT FREI" : race.quali && !race.qDone ? "ZEITFAHREN" : "STARTAUFSTELLUNG");
-      if (ph === "grid") return R + "START";
-      if (ph === "race") return R + (race.flagged ? "ZIELFLAGGE" : "RENNEN L\xC4UFT");
-      return R + "ZIELFLAGGE \xB7 FAHRER IN DIE BOX";
+      const rest = " \xB7 NOCH ETWA " + etwa(runRest());
+      if (ph === "out") return R + (!race.pitOut ? "BOXENAUSFAHRT FREI" : race.quali && !race.qDone ? "ZEITFAHREN" : "STARTAUFSTELLUNG") + rest;
+      if (ph === "grid") return R + "START" + rest;
+      if (ph === "race") return R + (race.flagged ? "ZIELFLAGGE" : "RENNEN \xB7 RUNDE " + clamp(race.order[0] ? race.order[0].lap : 1, 1, race.laps) + "/" + race.laps) + rest;
+      return R + "FAHRER IN DIE BOX" + rest;
+    }
+    function runNext() {
+      if (RUN.kind !== "visit" || !hallAsset || RUN.phase === "open") return "";
+      const no = RUN.no + 1, n = race.karts.length;
+      let booked = foot.booked && me.book === no ? 1 : 0;
+      for (const id in net.people) if (net.people[id].b === no) booked++;
+      const free = Math.max(0, n - booked);
+      return "LAUF " + no + " \xB7 START IN ETWA " + etwa(runRest() + TAKT.exit + TAKT.board + TAKT.toGrid[hall.set.quali !== "ohne" ? 1 : 0] + TAKT.grid) + " \xB7 " + (free === 0 ? "VOLL" : free === 1 ? "1 PLATZ FREI" : free + " PL\xC4TZE FREI");
     }
     function runStep(dt) {
       RUN.t += dt;
@@ -15652,43 +15968,54 @@ void main(){
         hall.rec[1] = SET.recName;
         if (RUN.kind === "visit" && hallAsset) runDecide(dt);
       }
+      if (foot.booked && me.book > 0 && me.book < RUN.no && me.in !== "kart" && RUN.kind === "visit" && net.on) {
+        const off = me.book === (hall.off | 0);
+        foot.booked = false;
+        me.book = 0;
+        if (off) note("Lauf " + hall.off + " ist ausgefallen: Niemand sa\xDF im Kart. Melde dich neu an.");
+      }
       hall.call = runCall();
+      hall.next = runNext();
+      if (RUN.kind === "visit" && RUN.phase === "board" && netBusy() && RUN.wait > TAKT.boardMax - 30 && RUN.wait < TAKT.boardMax && !RUN.said) {
+        RUN.said = true;
+        if (race.karts.some((k, i) => k.human && !seat(i).sat)) voiceSay("frist_einsteigen", "halle", { run: "board" });
+      }
     }
     function runDecide(dt) {
-      const ph = RUN.phase, ks = race.karts;
+      const ph = RUN.phase, ks = race.karts, company = netBusy();
       if (ph === "open") {
-        let ready = 0, late = 0;
+        let booked = 0, ready = 0, open = 0;
         for (let i = 0; i < ks.length; i++) {
           const h = holder(i);
-          if (h && h.booked && h.lies === 1) ready++;
-          else if (h && (i !== me.seat || net.on || h.booked)) late++;
+          if (h && h.booked) {
+            booked++;
+            if (h.lies === 1) ready++;
+          } else if (h && (i !== me.seat || net.on)) open++;
         }
-        for (const id in net.people) if (net.people[id].seat < 0) late++;
-        if (ready) RUN.wait += dt;
+        for (const id in net.people) if (net.people[id].seat < 0) open++;
+        if (company ? booked : ready) RUN.wait += dt;
         else RUN.wait = 0;
-        if (ready && crewReady() && (!late || RUN.wait > 45)) runSet("board");
+        const go = company ? RUN.wait > TAKT.book || ready > 0 && (!open || booked >= ks.length) : ready > 0;
+        if (go) {
+          if (crewReady()) runSet("board");
+          else if (company && RUN.wait > TAKT.book + 20) runSet("board", true);
+        }
       } else if (ph === "board") {
-        let some = false;
-        for (let i = 0; i < ks.length; i++) if (ks[i].human && seat(i).sat) some = true;
-        if (some) RUN.wait += dt;
-        if (RUN.wait > 90) for (let i = 0; i < ks.length; i++) if (ks[i].human && !seat(i).sat && i !== me.seat) {
-          const p = net.people[hall.seats[i]];
-          if (p) p.drop = RUN.no;
-          ks[i].human = false;
-          ks[i].own = true;
-          ks[i].net = null;
-          ks[i].driver = DRIVERS[i % DRIVERS.length];
-          botJoin(ks[i]);
-          if (crew.on) {
-            const f = crewFigure(i), sp = kartSide(ks[i], 1.6);
-            f.x = sp[0];
-            f.z = sp[1];
-            f.y = 0;
-            f.v = f.crouch = 0;
-            f.state = "wait";
-            crewShow(f, true);
+        RUN.wait = company ? RUN.wait + dt : 0;
+        if (RUN.wait > TAKT.boardMax) {
+          for (let i = 0; i < ks.length; i++) if (ks[i].human && !seat(i).sat) seatOut(i);
+          if (!ks.some((k) => k.human)) {
+            for (let i = 0; i < ks.length; i++) if (!ks[i].human && !ks[i].out && crew.on) {
+              const f = crewFigure(i);
+              if (f.state === "walk" && f.then === "enter") crewGo(f, [[crossAt(ks[i]), 44.55 + (i % 3) * 0.3], [-29, 45], [-29, 46.6], [-29 + (i % 3 - 1) * 0.5, 48.4], CREW.store((i + 7) % 8)], "wait");
+            }
+            crew.called = false;
+            hall.off = RUN.no;
+            RUN.no++;
+            runSet("open");
+            voiceSay("lauf_abgesagt", "halle");
+            return;
           }
-          crewCall(true);
         }
         if (allSat()) runSet("out");
       } else if (ph === "out") {
@@ -15697,6 +16024,8 @@ void main(){
       } else if (ph === "race") {
         let over = true;
         for (const k of ks) if (k.human && !k.finished) over = false;
+        if (race.flagged) RUN.flagW += dt;
+        if (RUN.flagW > TAKT.tailMax) over = true;
         if (over && (RUN.flagT += dt) > 3.4) runSet("in");
       } else if (ph === "in") {
         if (!race.entryOpen && race.pitT > 2) {
@@ -15710,6 +16039,7 @@ void main(){
     }
     function runHurry() {
       if (RUN.kind !== "visit" || !hallAsset || !hall.host) return;
+      if (netBusy() && RUN.phase !== "board") return;
       if (RUN.phase === "in") {
         RUN.no++;
         RUN.phase = "open";
@@ -15868,9 +16198,35 @@ void main(){
         tx = d > 1e-3 ? dx / d * sp : 0;
         tz = d > 1e-3 ? dz / d * sp : 0;
         run = false;
+      } else if (foot.lead) {
+        const L = foot.lead;
+        let q = L.pts[L.pi], dx = q[0] - foot.x, dz = q[1] - foot.z, d = Math.hypot(dx, dz);
+        if (d < 0.3 && L.pi < L.pts.length - 1 || d < 0.12) {
+          if (++L.pi >= L.pts.length) return footArrive(L);
+          q = L.pts[L.pi];
+          dx = q[0] - foot.x;
+          dz = q[1] - foot.z;
+          d = Math.hypot(dx, dz);
+        }
+        const sp = Math.min(1, d / 0.5 + 0.12);
+        tx = d > 1e-3 ? dx / d * sp : 0;
+        tz = d > 1e-3 ? dz / d * sp : 0;
+        run = false;
+        foot.yaw += wrapAngle(Math.atan2(dx, dz) - foot.yaw) * Math.min(1, dt * 2.5);
+        L.t += dt;
+        if ((L.chk += dt) > 2.5) {
+          if (Math.hypot(foot.x - L.cx, foot.z - L.cz) < 0.4) {
+            if (++L.n > 4 || L.t > 240) return footArrive(L);
+            L.pts = navWay([foot.x, foot.z, foot.y], L.to);
+            L.pi = 0;
+          }
+          L.cx = foot.x;
+          L.cz = foot.z;
+          L.chk = 0;
+        }
       }
       if (!isFinite(foot.bodyTh)) foot.bodyTh = foot.yaw - Math.PI / 2;
-      const bth = foot.bodyTh, stp = SITE.stepAt(foot.x, foot.z, foot.y), pc = footPace(tx, tz, run, foot.yaw, foot.vx, foot.vz, bth, foot.go ? 2 : SET.zufuss === "aussen" && !!FG, dt, onSteps(stp, tx, tz));
+      const bth = foot.bodyTh, stp = SITE.stepAt(foot.x, foot.z, foot.y), pc = footPace(tx, tz, run, foot.yaw, foot.vx, foot.vz, bth, foot.go || foot.lead ? 2 : SET.zufuss === "aussen" && !!FG, dt, onSteps(stp, tx, tz));
       foot.vx = pc[0];
       foot.vz = pc[1];
       foot.bodyTh = pc[2];
@@ -16234,7 +16590,14 @@ void main(){
             else if (e.why === "hand") voiceSay("auto_aus", "helm", { now: true });
             dash.t = 0;
           }
-        } else if (e.type === "flag") voiceSay("ziel", "halle");
+        } else if (e.type === "flag") {
+          const P = race.player;
+          voiceSay("ziel", "halle");
+          if (P && P.isPlayer && !P.finished && me.in === "kart" && e.k !== P) {
+            hud.message("Zielflagge: Runde zu Ende fahren", "hot", 3);
+            voiceSay("flagge_runde", "helm");
+          }
+        }
         else if (e.type === "finish") {
           G2.finishT = 0;
           const p = race.player;
@@ -16468,7 +16831,7 @@ void main(){
         }
         const afoot = G2.state === "foot";
         const riding = !!player && !afoot && G2.state !== "menu";
-        if (afoot && !G2.paused) footStep(dt);
+        if (afoot && (!G2.paused || foot.lead && netBusy())) footStep(dt);
         meFigure(dt, G2.time);
         netStep(dt, G2.time);
         const laps = G2.state === "outlap" || G2.state === "inlap";
@@ -16507,6 +16870,8 @@ void main(){
         handleEvents();
         runStep(dt);
         crewUpdate(dt, G2.time);
+        meClock(dt);
+        ghostStep(dt, G2.time);
         briefUpdate(dt);
         guideUpdate(dt);
         steleUpdate(dt);
@@ -16776,7 +17141,7 @@ void main(){
       st.vz = pc[1];
       st.th = pc[2];
       return st;
-    }, FG, riders, seatK, GOV, talk, talkLevel, talkApply, guide, voice, voiceSay, stele, STELE, TERMS, LINK, linkAt, proj, flag, info, dash, models, gear, brief, deskOpen, deskClose, crew, crewCall, crewSeated, FIG, enterHall, leaveKart, footAct, foot, FOOT, SITE, PIT, setPit, startOutlap: meSit, startInlap: () => runSet("in"), hall, me, runSet, runStep, seat, holder, net, netOpen, netLeave, getOut, applyLook, LOOKS, G: G2, SET, race, audio, world, cam, camera, renderer, post, scene, track, models, beginRace, attract, setPaused, hud, fx, keys, AIDriver, HULL, HIT, KP, Kart, stepKart, steerLimit, FEELS, setFeel, rig, AHEAD, nextAhead, PHYS, setPhys, SEATS, setSeat, BACK, DEVICE, touch };
+    }, FG, riders, seatK, GOV, talk, talkLevel, talkApply, guide, voice, voiceSay, stele, STELE, TERMS, LINK, linkAt, proj, flag, info, dash, models, gear, brief, deskOpen, deskClose, crew, crewCall, crewSeated, FIG, enterHall, leaveKart, footAct, foot, FOOT, SITE, PIT, setPit, startOutlap: meSit, startInlap: () => runSet("in"), hall, me, TAKT, seatOut, NAV, navWay, navFree, footLead, ghosts, runSet, runStep, seat, holder, net, netOpen, netLeave, getOut, applyLook, LOOKS, G: G2, SET, race, audio, world, cam, camera, renderer, post, scene, track, models, beginRace, attract, setPaused, hud, fx, keys, AIDriver, HULL, HIT, KP, Kart, stepKart, steerLimit, FEELS, setFeel, rig, AHEAD, nextAhead, PHYS, setPhys, SEATS, setSeat, BACK, DEVICE, touch };
   }
   function buildEnv(renderer) {
     const THREE = window.THREE;
