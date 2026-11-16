@@ -5,7 +5,7 @@
 <!-- Nachtschicht Grand Prix. (c) 2026. Alle Rechte vorbehalten. Kopieren, Veraendern, Weiterverbreiten und Einbetten nur mit schriftlicher Erlaubnis; siehe LICENSE.txt. -->
 <meta name="robots" content="noindex, nofollow">
 <script>(function(){var ok=["dyson96.github.io"],h=location.hostname,loc=h===""||h==="localhost"||h==="127.0.0.1"||h==="[::1]"||/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(h)||/\.local$/.test(h),own=loc||!ok.length||ok.indexOf(h)>=0,fr=false;try{fr=window.top!==window.self}catch(e){fr=true}if(!own||(fr&&!loc)){window.__LOCK=1;document.write('<meta charset="utf-8"><body style="margin:0;background:#050409;color:#ccd;font:16px/1.5 sans-serif;display:grid;place-items:center;height:100vh;text-align:center"><p>Nachtschicht Grand Prix l\u00e4uft nur auf seiner eigenen Adresse.<br><a style="color:#ff4fa0" href="https://dyson96.github.io/nachtschicht/">Zum Spiel</a></p></body>');document.close();if(window.stop)window.stop();}})();</script>
-<script>window.__BUILD="17.11.2026 00:31";</script>
+<script>window.__BUILD="17.11.2026 00:45";</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -2214,6 +2214,7 @@ body.touch .keys { display: none; }
       this.acc = 0;
       this.DT = 1 / 300;
       this.host = true;
+      this.lim = { out: 260, outQ: 420, inn: 300 };
       this.kicks = [];
       this.fr = 0;
     }
@@ -2453,6 +2454,8 @@ body.touch .keys { display: none; }
         k.finishTime = NaN;
         k.fl = null;
         k.out = false;
+        k.hurried = false;
+        if (k.own) k.dsq = false;
         k.y = 0;
         k.pitch = k.roll = k.u = k.v = k.r = 0;
         k.hold = true;
@@ -2500,6 +2503,7 @@ body.touch .keys { display: none; }
       for (let i = 0; i < this.karts.length; i++) {
         const k = this.karts[i], bb = bays(i);
         k.hold = k.set = !!k.out;
+        k.hurried = false;
         k.bx = bb.x;
         k.bz = bb.z;
         k.bth = bb.th;
@@ -3033,10 +3037,15 @@ body.touch .keys { display: none; }
           H.nearSaid = true;
           this.events.push({ type: "park", k: H });
         }
-        if (this.pitT > (inn ? 300 : qOn ? 420 : 260)) {
-          if (!inn && !this.qDone) this.qualiClose();
+        const lim = inn ? this.lim.inn : qOn ? this.lim.outQ : this.lim.out;
+        if (this.pitT > lim) {
+          if (!inn && !this.qDone && this.host && this.pitT > 330) this.qualiClose();
           this.autoTake(H, "frist", true);
         } else if (H.nearT > 12) this.autoTake(H, "platz");
+        else if (this.pitT > lim - 15 && !H.hurried) {
+          H.hurried = true;
+          this.events.push({ type: "hurry", k: H });
+        }
       }
       if (!this.host) return;
       for (const k of this.karts) if (!k.own && !k.set) {
@@ -3294,7 +3303,7 @@ body.touch .keys { display: none; }
     }
     updateOrder() {
       const ks = this.karts.slice(), L = this.track.L, laps = this.laps;
-      const way = (k) => k.out ? -1e9 : k.finished ? (k.fl == null ? laps : k.fl) * L - k.finishTime * 1e-6 : k.progress;
+      const way = (k) => k.out ? -1e9 : k.dsq ? -1e8 + k.progress : k.finished ? (k.fl == null ? laps : k.fl) * L - k.finishTime * 1e-6 : k.progress;
       ks.sort((a, b) => way(b) - way(a));
       this.order = ks;
       for (let i = 0; i < ks.length; i++) ks[i].pos = i + 1;
@@ -13198,7 +13207,7 @@ void main(){
         const lapT = qq === 1 ? race.pitT - player.qStart : qq === 2 && isFinite(player.qTime) ? player.qTime
           : race.state === "racing" && player.lap >= 1 ? race.time - player.lapStart : race.state === "racing" ? race.time : 0;
         speed = Math.round(Math.abs(player.u) * 3.6);
-        lapL = pit && player.set ? out ? "IN POSITION" : "GEPARKT" : player.auto ? "AUTOMATIK" : pit && player.parkD < 40 ? (out ? "STARTBOX " : "BOX ") + Math.round(player.parkD) + " m \u00b7 " + (DEVICE.touch ? "\u21ba" : "R") : guide.dash || (!pit ? "RUNDE " + clamp(player.lap, 1, race.laps) + "/" + race.laps : !out ? "AUSLAUFRUNDE" : qq === 0 ? "AUFW\u00c4RMEN" : qq === 1 ? "ZEITRUNDE" : "ZUR STARTBOX");
+        lapL = pit && player.set ? out ? "IN POSITION" : "GEPARKT" : player.dsq ? "RENNLEITUNG" : player.auto ? "AUTOMATIK" : pit && player.parkD < 40 ? (out ? "STARTBOX " : "BOX ") + Math.round(player.parkD) + " m \u00b7 " + (DEVICE.touch ? "\u21ba" : "R") : guide.dash || (!pit ? "RUNDE " + clamp(player.lap, 1, race.laps) + "/" + race.laps : !out ? "AUSLAUFRUNDE" : qq === 0 ? "AUFW\u00c4RMEN" : qq === 1 ? "ZEITRUNDE" : "ZUR STARTBOX");
         timeS = fmtTime(Math.max(1e-4, lapT)).slice(0, -2);
         news = hud.newsT > 0 ? hud.newsText : "";
         delta = isFinite(race.liveDelta) && race.state === "racing" ? fmtDelta(race.liveDelta).slice(0, -1) : "";
@@ -13803,6 +13812,14 @@ void main(){
       }
     }
     function enterGame() {
+      if (hallAsset && SET.bann > Date.now()) {
+        const el = $2("note");
+        el.textContent = "Hallenpause: noch " + mmss(Math.ceil((SET.bann - Date.now()) / 1e3)) + " Minuten.";
+        el.classList.add("on");
+        clearTimeout(noteTimer);
+        noteTimer = setTimeout(() => el.classList.remove("on"), 6000);
+        return;
+      }
       if (hallAsset) enterHall(null);
       else {
         G2.visit = false;
@@ -14324,6 +14341,17 @@ void main(){
           footSay("Dein Lauf ist vorbei: Bitte die Ausr\xFCstung zur\xFCck ins Fach.", 6);
         }
       } else me.outT = 0;
+      if (me.expel && me.in === "foot" && !(foot.out > 0) && !foot.lead) {
+        me.expel = false;
+        RC.row = 0;
+        SET.bann = Date.now() + 6e5;
+        saveSettings();
+        foot.booked = false;
+        me.book = 0;
+        voiceSay("hallenverweis", "helm", { now: true });
+        footSay("Zweimal aus der Wertung: zehn Minuten Pause. Die Halle bringt dich zur T\xFCr.", 8);
+        footLead(foot.helm ? "back" : "exit", true);
+      }
       const need = foot.booked && (!net.on || me.book >= RUN.no);
       if (strict && me.in === "foot" && foot.helm && !need && !foot.lead && me.seat >= 0) {
         me.gearT = (me.gearT || 0) + dt;
@@ -14772,7 +14800,7 @@ void main(){
     const PH = ["open", "board", "out", "grid", "race", "in"];
     const kartPack = (k) => [N3(hall.now()), N3(k.x), N3(k.z), N3(k.th), N3(k.u), N3(k.v), N3(k.r), N3(k.steer), k.idx | 0, k.lap | 0, N3(k.progress), k.q | 0,
       isFinite(k.qTime) ? N3(k.qTime) : -1, isFinite(k.best) ? N3(k.best) : -1, isFinite(k.last) ? N3(k.last) : -1, k.finished ? N3(k.finishTime) : -1,
-      (k.set ? 1 : 0) | (k.hold ? 2 : 0) | (k.auto ? 4 : 0) | (k.boosting ? 8 : 0), N3(k.thr), N3(k.brk), N3(k.boost), k.lapTimes ? k.lapTimes.length : 0];
+      (k.set ? 1 : 0) | (k.hold ? 2 : 0) | (k.auto ? 4 : 0) | (k.boosting ? 8 : 0) | (k.dsq ? 16 : 0), N3(k.thr), N3(k.brk), N3(k.boost), k.lapTimes ? k.lapTimes.length : 0];
     const kartTake = (k, a) => {
       if (!k || k.own || !Array.isArray(a) || a.length < 21) return;
       for (let j = 0; j < 21; j++) if (typeof a[j] !== "number" || !isFinite(a[j])) return;
@@ -14814,6 +14842,7 @@ void main(){
         k.auto = !!(a[16] & 4);
         k.hold = !!(a[16] & 2);
         k.boosting = !!(a[16] & 8);
+        k.dsq = !!(a[16] & 16);
         k.thr = a[17];
         k.brk = a[18];
         k.boost = a[19];
@@ -15033,6 +15062,7 @@ void main(){
         if (foot.booked && me.book === RUN.no) {
           foot.booked = false;
           me.book = 0;
+          meMissed();
           note("Lauf " + RUN.no + " f\xE4hrt ohne dich. Melde dich f\xFCr den n\xE4chsten an.");
         }
       }
@@ -15206,6 +15236,7 @@ void main(){
       if (mine >= 0 && foot.booked && me.book === no && want !== "open" && !H.hum[mine] && me.in !== "kart") {
         foot.booked = false;
         me.book = 0;
+        meMissed();
         note("Lauf " + no + " f\xE4hrt ohne dich. Melde dich f\xFCr den n\xE4chsten an.");
       }
       let guard = 0;
@@ -15892,7 +15923,7 @@ void main(){
         if (hall.host || !race.final) race.final = race.karts.map((k) => k.pos);
         crew.called = false;
         crew.pod = crew.on && race.karts.filter((k) => !k.out).length > 3 ? { phase: "gather", t: 0, end: 0, up: false, top: [1, 2, 3].map((p) => race.final.indexOf(p)) } : null;
-        brief.result = brief.last = race.karts.map((k, i) => ({ pos: race.final ? race.final[i] : k.pos, name: k.driver.name, best: isFinite(k.best) ? fmtTime(k.best) : "–", color: k.driver.color, seat: i, out: !!k.out })).filter((r) => !r.out).sort((a, b) => a.pos - b.pos);
+        brief.result = brief.last = race.karts.map((k, i) => ({ pos: race.final ? race.final[i] : k.pos, name: k.driver.name, best: k.dsq ? "DSQ" : isFinite(k.best) ? fmtTime(k.best) : "–", color: k.driver.color, seat: i, out: !!k.out })).filter((r) => !r.out).sort((a, b) => a.pos - b.pos);
         if (hall.host) for (const k of race.karts) if (isFinite(k.best) && k.best > 0 && !(SET.rec > 0 && SET.rec <= k.best)) {
           SET.rec = k.best;
           SET.recName = k.driver.name;
@@ -15967,6 +15998,12 @@ void main(){
         hall.rec[0] = SET.rec;
         hall.rec[1] = SET.recName;
         if (RUN.kind === "visit" && hallAsset) runDecide(dt);
+      }
+      {
+        const strict = rcStrict();
+        race.lim.out = strict ? 145 : 260;
+        race.lim.outQ = strict ? 245 : 420;
+        race.lim.inn = strict ? 135 : 300;
       }
       if (foot.booked && me.book > 0 && me.book < RUN.no && me.in !== "kart" && RUN.kind === "visit" && net.on) {
         const off = me.book === (hall.off | 0);
@@ -16050,6 +16087,7 @@ void main(){
     function meSit() {
       runHurry();
       me.in = "kart";
+      me.miss = 0;
       me.run = RUN.no;
       G2.blend = { t: 0, dur: 0.9, x: cam.x, y: cam.y, z: cam.z, lx: cam.lx, ly: cam.ly, lz: cam.lz };
       models[me.seat].setDriver(true);
@@ -16091,6 +16129,8 @@ void main(){
       foot.hintT = 0;
     }
     function getOut() {
+      if (race.player && !race.player.dsq) RC.row = 0;
+      else if (RC.row >= 2 && rcStrict()) me.expel = true;
       $2("results").classList.remove("on");
       G2.parked = false;
       $2("note").classList.remove("on");
@@ -16495,6 +16535,12 @@ void main(){
       $2("w-act").addEventListener("click", footAct);
       $2("b-ok").addEventListener("click", () => {
         const was = foot.desk && !foot.booked, j = nearTerm();
+        if (me.ban > 0 && runBook() <= me.ban) {
+          deskClose();
+          audio.beep(196, 0.16, 0.14, "square");
+          note("Du setzt Lauf " + me.ban + " aus. Check-in wieder, sobald er aufgerufen ist.");
+          return;
+        }
         SET.name = cleanName($2("b-name").value) || "Gast";
         foot.booked = true;
         me.book = runBook();
@@ -16526,6 +16572,108 @@ void main(){
         el.dataset.t = text;
         if (text) el.innerHTML = text;
         el.classList.toggle("on", !!text);
+      }
+    }
+    const RC = { run: -1, wrongT: 0, wrongSaid: false, slow: false, standT: 0, tryT: 0, standSaid: false, capT: 0, cap: 0, rams: [], ramAt: 0, pens: 0, strikes: 0, row: 0, awayT: 0, why: "", pu: 0, pthr: 0 };
+    const inLane = (k) => k.z > 33.3 && k.x > -47 && k.x < 21;
+    const rcStrict = () => netBusy() || TAKT.allein;
+    function rcDsq(k) {
+      if (k.dsq) return;
+      k.dsq = true;
+      RC.row++;
+      me.ban = RUN.no + 1;
+      race.autoTake(k, "dsq", true);
+      hud.message("Aus der Wertung", "hot", 3.5);
+      voiceSay("rl_dsq", "helm", { now: true });
+    }
+    function raceControl(dt, k) {
+      const strict = rcStrict(), racing = race.state === "racing" || race.state === "finished", pit = race.state === "pit", live = (racing || pit) && !k.hold && !k.set, inp = k.input, lane = inLane(k);
+      if (RC.run !== RUN.no) {
+        RC.run = RUN.no;
+        RC.wrongT = RC.standT = RC.tryT = RC.capT = RC.pens = RC.strikes = RC.awayT = 0;
+        RC.wrongSaid = RC.slow = RC.standSaid = false;
+        RC.rams.length = 0;
+      }
+      if (k.dsq && live && !k.auto) race.autoTake(k, "dsq", true);
+      let cap = lane && live ? SITE.pit.v : 0;
+      if (strict && live && !k.dsq) {
+        if (k.auto) {
+          RC.awayT = RC.why === "still" && !k.autoFin ? RC.awayT + dt : 0;
+          if (RC.awayT > 60) k.autoFin = true;
+          RC.wrongT = RC.standT = 0;
+        } else {
+          RC.awayT = 0;
+          const along = k.u * Math.cos(k.th - k.trTh);
+          RC.wrongT = !lane && !k.link && along < -1.5 ? RC.wrongT + dt : Math.max(0, RC.wrongT - dt * 2);
+          if (RC.wrongT < 0.5) RC.wrongSaid = RC.slow = false;
+          if (RC.wrongT > 3 && !RC.wrongSaid) {
+            RC.wrongSaid = true;
+            voiceSay("rl_falsch", "helm", { now: true });
+          }
+          if (RC.wrongT > 8 && !RC.slow) {
+            RC.slow = true;
+            voiceSay("rl_drossel", "helm", { now: true });
+          }
+          if (RC.wrongT > 15) rcDsq(k);
+          if (race.state === "racing" && race.time > 6 && !lane && Math.abs(k.u) < 1.2) {
+            RC.standT += dt;
+            if (inp.throttle > 0.2 || inp.brake > 0.2) RC.tryT += dt;
+          } else {
+            RC.standT = RC.tryT = 0;
+            RC.standSaid = false;
+          }
+          if (RC.standT > 8 && !RC.standSaid) {
+            RC.standSaid = true;
+            voiceSay("rl_steht", "helm", { now: true });
+          }
+          if (RC.standT > (RC.tryT > 3 ? 20 : 15)) {
+            const stuck = RC.tryT > 3;
+            RC.standT = RC.tryT = 0;
+            RC.standSaid = false;
+            race.autoTake(k, stuck ? "frei" : "steht");
+          }
+          if (racing && k.impact > 0 && k.hitWith && !k.hitWith.out) {
+            const o = k.hitWith, c = Math.cos(k.th), sn = -Math.sin(k.th), ahead = (o.x - k.x) * c + (o.z - k.z) * sn;
+            const close = RC.pu - (o._pu != null ? o._pu * Math.cos(o.th - k.th) : 0);
+            if (ahead > 0.9 && close > 4 && RC.pthr > 0.3 && G2.time - RC.ramAt > 0.8) {
+              RC.ramAt = G2.time;
+              RC.rams.push(G2.time);
+              while (RC.rams.length && G2.time - RC.rams[0] > 45) RC.rams.shift();
+              if (RC.rams.length >= 3) {
+                RC.rams.length = 0;
+                if (++RC.pens >= 3) rcDsq(k);
+                else {
+                  RC.capT = 10;
+                  voiceSay("rl_ramm", "helm", { now: true });
+                }
+              }
+            }
+          }
+        }
+      }
+      RC.pu = k.u;
+      RC.pthr = inp.throttle;
+      for (const o of race.karts) o._pu = o.u;
+      if (RC.slow && !k.dsq) cap = cap > 0 ? Math.min(cap, 2.5) : 2.5;
+      if (RC.capT > 0) {
+        RC.capT -= dt;
+        cap = cap > 0 ? Math.min(cap, 5) : 5;
+      }
+      RC.cap = cap;
+      if (cap > 0 && !k.auto) {
+        if (k.u > cap) {
+          inp.throttle = 0;
+          inp.boost = false;
+          inp.brake = Math.max(inp.brake, clamp((k.u - cap) * 0.5, 0.12, 1));
+        } else if (k.u > cap - 0.6) inp.throttle = Math.min(inp.throttle, 0.25), inp.boost = false;
+        else if (k.u < -cap) inp.brake = 0;
+      }
+    }
+    function meMissed() {
+      me.miss = (me.miss | 0) + 1;
+      if (me.miss >= 2 && rcStrict()) {
+        me.miss = 0;
+        me.ban = RUN.no + 1;
       }
     }
     function autoKey() {
@@ -16586,10 +16734,14 @@ void main(){
           if (e.k === race.player) voiceSay("auto_platz", "helm");
         } else if (e.type === "auto") {
           if (e.k === race.player) {
-            if (e.on && e.why !== "weiter") voiceSay(e.why === "taste" ? "auto_an" : e.why === "frist" ? "auto_frist" : e.why === "still" ? "auto_still" : "auto_zwang", "helm", { now: true });
+            if (e.on && e.why !== "weiter" && e.why !== "dsq") voiceSay(e.why === "taste" ? "auto_an" : e.why === "frist" ? "auto_frist" : e.why === "still" || e.why === "steht" || e.why === "frei" ? "auto_still" : "auto_zwang", "helm", { now: true });
             else if (e.why === "hand") voiceSay("auto_aus", "helm", { now: true });
+            if (e.on && e.why !== "weiter") RC.why = e.why;
+            if (e.on && (e.why === "frist" || e.why === "steht") && rcStrict() && ++RC.strikes >= 2) rcDsq(e.k);
             dash.t = 0;
           }
+        } else if (e.type === "hurry") {
+          if (e.k === race.player && rcStrict()) voiceSay("frist_warn", "helm", { now: true });
         } else if (e.type === "flag") {
           const P = race.player;
           voiceSay("ziel", "halle");
@@ -16843,7 +16995,7 @@ void main(){
           if (player.auto) {
             readInput(autoProbe);
             const q = autoProbe.input;
-            if (!player.autoFin && (q.throttle > 0.1 || q.brake > 0.1 || Math.abs(q.steer) > 0.2)) race.autoGive(player, "hand");
+            if (!player.autoFin && !player.dsq && (q.throttle > 0.1 || q.brake > 0.1 || Math.abs(q.steer) > 0.2)) race.autoGive(player, "hand");
           }
           if (!player.auto) {
             readInput(player);
@@ -16864,6 +17016,7 @@ void main(){
             }
             me.stuckT = (race.state === "racing" || race.state === "finished") && G2.state !== "grid" && !player.hold && (Math.abs(player.u) < 1.5 || Math.abs(wrapAngle(player.th - player.trTh)) > 1.75) ? me.stuckT + dt : 0;
           } else me.idleT = me.stuckT = 0;
+          if (RUN.kind === "visit" && hallAsset) raceControl(dt, player);
         }
         kartHint();
         if (!(RUN.phase === "open" && race.state !== "pit")) race.step(dt);
@@ -17141,7 +17294,7 @@ void main(){
       st.vz = pc[1];
       st.th = pc[2];
       return st;
-    }, FG, riders, seatK, GOV, talk, talkLevel, talkApply, guide, voice, voiceSay, stele, STELE, TERMS, LINK, linkAt, proj, flag, info, dash, models, gear, brief, deskOpen, deskClose, crew, crewCall, crewSeated, FIG, enterHall, leaveKart, footAct, foot, FOOT, SITE, PIT, setPit, startOutlap: meSit, startInlap: () => runSet("in"), hall, me, TAKT, seatOut, NAV, navWay, navFree, footLead, ghosts, runSet, runStep, seat, holder, net, netOpen, netLeave, getOut, applyLook, LOOKS, G: G2, SET, race, audio, world, cam, camera, renderer, post, scene, track, models, beginRace, attract, setPaused, hud, fx, keys, AIDriver, HULL, HIT, KP, Kart, stepKart, steerLimit, FEELS, setFeel, rig, AHEAD, nextAhead, PHYS, setPhys, SEATS, setSeat, BACK, DEVICE, touch };
+    }, FG, riders, seatK, GOV, talk, talkLevel, talkApply, guide, voice, voiceSay, stele, STELE, TERMS, LINK, linkAt, proj, flag, info, dash, models, gear, brief, deskOpen, deskClose, crew, crewCall, crewSeated, FIG, enterHall, leaveKart, footAct, foot, FOOT, SITE, PIT, setPit, startOutlap: meSit, startInlap: () => runSet("in"), hall, me, TAKT, RC, rcDsq, seatOut, NAV, navWay, navFree, footLead, ghosts, runSet, runStep, seat, holder, net, netOpen, netLeave, getOut, applyLook, LOOKS, G: G2, SET, race, audio, world, cam, camera, renderer, post, scene, track, models, beginRace, attract, setPaused, hud, fx, keys, AIDriver, HULL, HIT, KP, Kart, stepKart, steerLimit, FEELS, setFeel, rig, AHEAD, nextAhead, PHYS, setPhys, SEATS, setSeat, BACK, DEVICE, touch };
   }
   function buildEnv(renderer) {
     const THREE = window.THREE;
