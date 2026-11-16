@@ -5,7 +5,7 @@
 <!-- Nachtschicht Grand Prix. (c) 2026. Alle Rechte vorbehalten. Kopieren, Veraendern, Weiterverbreiten und Einbetten nur mit schriftlicher Erlaubnis; siehe LICENSE.txt. -->
 <meta name="robots" content="noindex, nofollow">
 <script>(function(){var ok=["dyson96.github.io"],h=location.hostname,loc=h===""||h==="localhost"||h==="127.0.0.1"||h==="[::1]"||/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(h)||/\.local$/.test(h),own=loc||!ok.length||ok.indexOf(h)>=0,fr=false;try{fr=window.top!==window.self}catch(e){fr=true}if(!own||(fr&&!loc)){window.__LOCK=1;document.write('<meta charset="utf-8"><body style="margin:0;background:#050409;color:#ccd;font:16px/1.5 sans-serif;display:grid;place-items:center;height:100vh;text-align:center"><p>Nachtschicht Grand Prix l\u00e4uft nur auf seiner eigenen Adresse.<br><a style="color:#ff4fa0" href="https://dyson96.github.io/nachtschicht/">Zum Spiel</a></p></body>');document.close();if(window.stop)window.stop();}})();</script>
-<script>window.__BUILD="16.11.2026 21:47";</script>
+<script>window.__BUILD="16.11.2026 22:24";</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -11566,10 +11566,11 @@ void main(){
       }
       return { ctx: c.getContext("2d"), tex: t };
     }
-    const REGIE = { made: false, off: false, cams: [], drones: [], screens: [], pg: 0, shot: 0, focus: null, fight: 0, look: 0, fr: 0, feeds: [], cost: 0, vary: 0, tour: 0, calm: true, kartCam: [0.47, 0.715], hold: -1, fixN: 0 };
+    const REGIE = { made: false, off: false, cams: [], drones: [], screens: [], pg: 0, shot: 0, focus: null, fight: 0, look: 0, fr: 0, feeds: [], cost: 0, vary: 0, tour: 0, calm: true, hold: -1, fixN: 0, cdv: [], rec: null, last: null, rp: { t: 0, idle: 9, cam: -1, shot: 0, fixN: 0, aim: [0, 0, 0], fov: 40, gap: 0, seen: false, step: 0 } };
     function regieInit() {
       REGIE.made = true;
-      if (!hallAsset || DEVICE.lite || !SITE.blocks.some((q) => q[6] === "videowand")) { REGIE.off = true; return; }
+      if (!hallAsset || !SITE.blocks.some((q) => q[6] === "videowand")) { REGIE.off = true; return; }
+      REGIE.lite = !!DEVICE.lite;
       const N = track.N, ds = track.ds, HW = track.HW, L = track.L;
       const TP = (i, d, h) => { i = (i % N + N) % N; return [track.X[i] - Math.sin(track.TH[i]) * d, track.Y[i] + h, track.Z[i] - Math.cos(track.TH[i]) * d]; };
       const mat = (c) => new THREE.MeshBasicMaterial({ color: new THREE.Color(c[0], c[1], c[2]) });
@@ -11632,20 +11633,47 @@ void main(){
         c.head = h;
         c.tally = h.userData.tally;
       }
+      const std = (c, rough, metal) => new THREE.MeshStandardMaterial({ color: new THREE.Color(c[0], c[1], c[2]), roughness: rough, metalness: metal, envMapIntensity: 0.9 });
+      const roundBox = (w, hh, d, r) => {
+        const s = new THREE.Shape(), x = w / 2 - r, y = hh / 2 - r;
+        s.absarc(x, y, r, 0, Math.PI / 2);
+        s.absarc(-x, y, r, Math.PI / 2, Math.PI);
+        s.absarc(-x, -y, r, Math.PI, Math.PI * 1.5);
+        s.absarc(x, -y, r, Math.PI * 1.5, Math.PI * 2);
+        const g = new THREE.ExtrudeGeometry(s, { depth: d, bevelEnabled: true, bevelThickness: 0.002, bevelSize: 0.002, bevelSegments: 2, curveSegments: 6 });
+        g.translate(0, 0, -d / 2);
+        return g;
+      };
+      const BODY = std([0.03, 0.032, 0.038], 0.42, 0.35), FRONT = std([0.006, 0.007, 0.01], 0.07, 0.6), LENS = std([0.004, 0.005, 0.009], 0.02, 1), RING = std([0.3, 0.31, 0.33], 0.22, 1), PAD = std([0.012, 0.012, 0.014], 0.8, 0);
+      const gBody = roundBox(0.058, 0.04, 0.022, 0.008), gFront = roundBox(0.05, 0.032, 0.0008, 0.005);
       for (let i = 0; i < models.length; i++) {
-        const fr = models[i] && models[i].frame;
-        if (!fr) continue;
-        const g = new THREE.Group(), m = tube(0.01, 0.08, STEEL, 6), h = head(0.4), node = new THREE.Object3D();
-        m.position.set(0, -0.065, 0);
-        h.rotation.y = -Math.PI / 2;
-        g.add(m, h);
-        g.position.set(REGIE.kartCam[0], REGIE.kartCam[1], 0);
-        node.rotation.set(0, -Math.PI / 2, 0);
-        node.rotateX(-0.06);
-        node.position.set(0.13, 0.0, 0);
+        const hm = models[i] && models[i].main && models[i].main.helmet;
+        if (!hm) continue;
+        const g = new THREE.Group(), node = new THREE.Object3D();
+        const body = new THREE.Mesh(gBody, BODY), front = new THREE.Mesh(gFront, FRONT);
+        front.position.z = 0.0142;
+        const lens = new THREE.Mesh(new THREE.CylinderGeometry(0.0142, 0.0142, 0.008, 24), LENS), ring = new THREE.Mesh(new THREE.TorusGeometry(0.0152, 0.0017, 8, 28), RING);
+        lens.rotation.x = Math.PI / 2;
+        lens.position.set(-0.012, 0.002, 0.017);
+        ring.position.set(-0.012, 0.002, 0.0205);
+        const col = lin(DRIVERS[i % DRIVERS.length].color, 1.5), glow = new THREE.Mesh(new THREE.TorusGeometry(0.0176, 0.0008, 6, 32), new THREE.MeshBasicMaterial({ color: new THREE.Color(col[0], col[1], col[2]) }));
+        glow.position.set(-0.012, 0.002, 0.0152);
+        const disp = box(0.017, 0.012, 0.0006, FRONT), tally = box(0.0035, 0.0035, 0.0008, new THREE.MeshBasicMaterial({ color: 0 })), knob = tube(0.0048, 0.0022, RING, 14);
+        disp.position.set(0.0155, -0.005, 0.0152);
+        tally.position.set(0.0155, 0.009, 0.0152);
+        knob.position.set(0.017, 0.0222, 0.001);
+        const hinge = box(0.016, 0.014, 0.012, PAD), pad = box(0.036, 0.03, 0.004, PAD);
+        hinge.position.set(0, -0.004, -0.019);
+        pad.position.set(0, -0.002, -0.027);
+        g.add(body, front, lens, ring, glow, disp, tally, knob, hinge, pad);
+        g.rotation.y = Math.PI / 2;
+        g.position.set(-0.158, 0.776, 0);
+        node.position.set(-0.012, 0.002, 0.03);
+        node.rotation.set(0, Math.PI, 0);
+        node.rotateX(-0.05);
         g.add(node);
-        fr.add(g);
-        REGIE.cams.push({ name: "Kart " + (i + 1), kind: "kart", k: i, node, tally: h.userData.tally, fov: 84 });
+        hm.add(g);
+        REGIE.cams.push({ name: "Helm " + (i + 1), kind: "kart", k: i, node, tally, fov: 96 });
       }
       const ROT = new THREE.MeshBasicMaterial({ color: new THREE.Color(0.05, 0.055, 0.07), transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false });
       for (let q = 0; q < 2; q++) {
@@ -11691,13 +11719,13 @@ void main(){
       REGIE.high = (x, z) => H[clamp(Math.round((z - B.z0) / 2), 0, gh - 1) * gw + clamp(Math.round((x - B.x0) / 2), 0, gw - 1)];
       REGIE.box = [B.x0 + 5, B.z0 + 5, B.x1 - 5, SITE.ZT - 3];
       const opt = { type: post.type, format: THREE.RGBAFormat, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: true, stencilBuffer: false };
-      for (let f = 0; f < 2; f++) {
+      for (let f = 0; f < 3; f++) {
         const c = document.createElement("canvas");
         c.width = 1024;
         c.height = 576;
         const tex = new THREE.CanvasTexture(c);
         tex.encoding = THREE.sRGBEncoding;
-        REGIE.feeds.push({ rt: new THREE.WebGLRenderTarget(640, 360, opt), ctx: c.getContext("2d"), tex, cam: -1, sig: "", t: 0, planes: [] });
+        REGIE.feeds.push({ rt: new THREE.WebGLRenderTarget(REGIE.lite ? 320 : 640, REGIE.lite ? 180 : 360, opt), ctx: c.getContext("2d"), tex, cam: -1, sig: "", t: 0, planes: [] });
       }
       REGIE.fc = new THREE.PerspectiveCamera(40, 16 / 9, 0.12, 420);
       for (const q of SITE.blocks) {
@@ -11718,6 +11746,23 @@ void main(){
         over.renderOrder = 3;
         const nx = f === "e" ? 1 : f === "w" ? -1 : 0, nz = f === "s" ? 1 : f === "n" ? -1 : 0;
         REGIE.screens.push({ pic, over, c: at(0), n: [nx, nz], r: Math.hypot(w, h) / 2, tv: q[6] === "tv", feed: 0, pick: -1, seen: false });
+      }
+      const fb = SITE.blocks.find((q) => q[6] === "tafel" && q[7] === "w" && q[4] < 3);
+      if (fb) {
+        const hh = fb[5] - fb[4] - 0.18, ww = hh * 16 / 9, mid = [fb[0] - 0.011, (fb[4] + fb[5]) / 2, (fb[1] + fb[3]) / 2];
+        const pic = new THREE.Mesh(new THREE.PlaneGeometry(ww, hh), REGIE.screens[0].pic.material.clone()), over = new THREE.Mesh(new THREE.PlaneGeometry(ww, hh), new THREE.MeshBasicMaterial({ map: REGIE.feeds[2].tex, transparent: true, depthWrite: false }));
+        const back = new THREE.Mesh(new THREE.PlaneGeometry(fb[3] - fb[1] - 0.1, fb[5] - fb[4] - 0.1), new THREE.MeshBasicMaterial({ color: 0x010102 }));
+        pic.material.uniforms.tMap.value = REGIE.feeds[2].rt.texture;
+        [back, pic, over].forEach((m, q) => {
+          m.material.polygonOffset = true;
+          m.material.polygonOffsetFactor = m.material.polygonOffsetUnits = -4 - 2 * q;
+          m.position.set(mid[0] - q * 0.003, mid[1], mid[2]);
+          m.rotation.y = -Math.PI / 2;
+          m.visible = false;
+          scene.add(m);
+        });
+        over.renderOrder = 3;
+        REGIE.foyer = { pic, over, back, c: [fb[0], mid[1], mid[2]], r: Math.hypot(ww, hh) / 2 };
       }
       REGIE.sph = new THREE.Sphere();
       REGIE.fru = new THREE.Frustum();
@@ -11894,6 +11939,172 @@ void main(){
         REGIE.pg = next;
         REGIE.shot = 0;
       }
+      regieSound();
+      regieRecord(dt, racing);
+      const rp = REGIE.rp, R = REGIE.last;
+      if (R && REGIE.foyer) {
+        rp.idle = rp.seen ? 0 : rp.idle + dt;
+        if (rp.idle > 4) { rp.t = 0; rp.gap = 0; rp.cam = -1; }
+        else if (rp.gap > 0) { rp.gap -= dt; if (rp.gap <= 0) { rp.t = 0; rp.cam = -1; } }
+        else if (rp.seen) {
+          rp.t += dt;
+          rp.shot += dt;
+          rp.step = (rp.step || 0) + dt;
+          if (rp.t * REC_HZ >= R.n - 1) rp.gap = 10;
+        }
+      }
+    }
+    const REC = ["x", "y", "z", "th", "pitch", "roll", "steer", "thr", "brk", "ax", "ay", "wheelSpin", "s", "rotation", "auto", "link", "lap"], REC_HZ = 20, REC_MAX = 20 * 60 * 12;
+    function regieRecord(dt, racing) {
+      const ks = race.karts, n = Math.min(8, ks.length), W = REC.length * 8;
+      let R = REGIE.rec;
+      if (!R || !R.on) {
+        if (!racing) return;
+        const cap = REGIE.lite ? REC_MAX / 2 : REC_MAX, data = R && R.data ? R.data : new Float32Array(cap * W);
+        R = REGIE.rec = { on: true, data, cap, n: 0, acc: 0, karts: n, no: RUN.no, mine: race.player && race.player.human && me.in === "kart" ? ks.indexOf(race.player) : -1, names: ks.map((k) => String(k.driver.name || "")), who: 0 };
+      }
+      R.acc += dt;
+      while (R.acc >= 1 / REC_HZ && R.n < R.cap) {
+        R.acc -= 1 / REC_HZ;
+        const o = R.n++ * W;
+        for (let i = 0; i < n; i++) for (let q = 0; q < REC.length; q++) R.data[o + i * REC.length + q] = +ks[i][REC[q]] || 0;
+      }
+      if (RUN.phase !== "race" || R.n >= R.cap) {
+        R.on = false;
+        if (R.n > REC_HZ * 12) {
+          R.who = R.mine >= 0 ? R.mine : Math.max(0, ks.indexOf(race.order && race.order[0]));
+          const old = REGIE.last;
+          REGIE.last = R;
+          REGIE.rec = old ? { on: false, data: old.data, cap: old.cap } : null;
+          REGIE.rp.t = 0;
+          REGIE.rp.cam = -1;
+          REGIE.rp.gap = 0;
+        }
+      }
+    }
+    const RK = [];
+    function regieReplay(f) {
+      const R = REGIE.last, rp = REGIE.rp, W = REC.length * 8, fr = Math.min(R.n - 1.001, rp.t * REC_HZ), i0 = Math.floor(fr), u = fr - i0, ks = race.karts, UK = world.U;
+      const was = [];
+      for (let i = 0; i < R.karts; i++) {
+        const k = RK[i] || (RK[i] = { kickU: 0, kickV: 0 }), a = i0 * W + i * REC.length, b = a + W, m = models[i];
+        for (let q = 0; q < REC.length; q++) k[REC[q]] = lerp(R.data[a + q], R.data[b + q], u);
+        k.th = R.data[a + 3] + wrapAngle(R.data[b + 3] - R.data[a + 3]) * u;
+        k.s = R.data[a + 12];
+        k.auto = R.data[a + 14] > 0.5;
+        k.link = R.data[a + 15] > 0.5;
+        if (!m) continue;
+        was[i] = riders[i] ? riders[i].on : true;
+        m.setDriver(true);
+        m.setPose(k, 0, 6);
+        if (FG && riders[i]) riderPose(i, k, 0);
+        if (i < 8) {
+          UK.uKartPos.value[i].set(k.x, k.y, k.z, 1);
+          UK.uKartDir.value[i].set(Math.cos(k.th), 0, -Math.sin(k.th));
+          UK.uKartSlope.value[i] = Math.tan(k.pitch);
+        }
+      }
+      const F = RK[R.who], inRange = (c, s) => c.s0 < c.s1 ? s >= c.s0 && s < c.s1 : c.s0 >= 0 && (s >= c.s0 || s < c.s1);
+      const fixFor = F.link ? -1 : REGIE.cams.findIndex((c) => c.kind === "fix" && !c.wide && inRange(c, F.s)), helm = REGIE.cams.findIndex((c) => c.kind === "kart" && c.k === R.who), wide = REGIE.cams.findIndex((c) => c.wide);
+      const cur = rp.cam >= 0 ? REGIE.cams[rp.cam] : null;
+      let next = -1;
+      if (!cur) next = fixFor >= 0 ? fixFor : helm;
+      else if (cur.kind === "fix") { if (fixFor !== rp.cam && rp.shot > 1.2 || rp.shot > 8) next = rp.fixN >= 2 || fixFor < 0 || fixFor === rp.cam ? helm : fixFor; }
+      else if (rp.shot > 4.5) next = fixFor >= 0 ? fixFor : wide;
+      if (next >= 0 && next !== rp.cam) {
+        rp.fixN = REGIE.cams[next].kind === "fix" ? rp.fixN + 1 : 0;
+        rp.cam = next;
+        rp.shot = 0;
+        rp.aim[0] = F.x; rp.aim[1] = F.y + 0.45; rp.aim[2] = F.z;
+      }
+      const c = REGIE.cams[rp.cam], fc = REGIE.fc;
+      if (c.kind === "kart") regieAim(rp.cam);
+      else {
+        const e = 1 - Math.exp(-rp.step * 7);
+        rp.aim[0] += (F.x - rp.aim[0]) * e; rp.aim[1] += (F.y + 0.45 - rp.aim[1]) * e; rp.aim[2] += (F.z - rp.aim[2]) * e;
+        const tg = c.wide ? c.home : rp.aim, dist = Math.hypot(tg[0] - c.p[0], tg[1] - c.p[1], tg[2] - c.p[2]);
+        rp.fov = c.wide ? 62 : damp(rp.fov, clamp(2 * Math.atan(5.2 / Math.max(4, dist)) * 180 / Math.PI, 9, 58), 3, rp.step);
+        fc.position.set(c.p[0], c.p[1], c.p[2]);
+        fc.up.set(0, 1, 0);
+        fc.lookAt(tg[0], tg[1], tg[2]);
+        fc.translateZ(-0.26);
+        fc.fov = rp.fov;
+        fc.updateProjectionMatrix();
+      }
+      rp.step = 0;
+      const sec = Math.floor(rp.t), sig = "r" + R.no + "|" + sec + "|" + rp.cam;
+      if (sig !== f.sig) {
+        f.sig = sig;
+        const g = f.ctx;
+        g.clearRect(0, 0, 1024, 576);
+        g.textBaseline = "middle";
+        g.fillStyle = "rgba(5,4,9,0.72)";
+        g.fillRect(24, 24, 470, 44);
+        g.fillRect(24, 508, 470, 44);
+        g.fillStyle = "#12e6ff";
+        g.font = "600 24px " + SCREEN_FONT;
+        g.fillText("WIEDERHOLUNG  LAUF " + R.no, 40, 47);
+        g.fillStyle = "#f1eefc";
+        g.fillText((R.mine >= 0 ? "DEIN RENNEN" : R.names[R.who].toUpperCase()) + "   " + Math.floor(sec / 60) + ":" + String(sec % 60).padStart(2, "0") + "   " + c.name.toUpperCase(), 40, 531);
+        f.tex.needsUpdate = true;
+      }
+      const P = REGIE.foyer, mine = models[me.seat] || null, hv = mine && mine.main && mine.main.helmet ? mine.main.helmet.visible : null, ro = post.U ? post.U.uReflOn.value : 0;
+      const shown = P.pic.visible;
+      P.pic.visible = P.over.visible = false;
+      if (hv === false) mine.main.helmet.visible = true;
+      if (post.U) post.U.uReflOn.value = 0;
+      renderer.setRenderTarget(f.rt);
+      renderer.clear();
+      renderer.render(scene, fc);
+      renderer.setRenderTarget(null);
+      if (post.U) post.U.uReflOn.value = ro;
+      if (hv === false) mine.main.helmet.visible = false;
+      P.pic.visible = P.over.visible = shown;
+      for (let i = 0; i < R.karts; i++) {
+        const m = models[i], k = ks[i];
+        if (!m || !k) continue;
+        m.setPose(k, 0, REGIE.cdv[i] || 6);
+        if (FG && riders[i]) riderPose(i, k, 0);
+        m.setDriver(was[i]);
+        if (i < 8) {
+          UK.uKartPos.value[i].set(k.x, k.y, k.z, 1);
+          UK.uKartDir.value[i].set(Math.cos(k.th), 0, -Math.sin(k.th));
+          UK.uKartSlope.value[i] = Math.tan(k.pitch);
+        }
+      }
+    }
+    function regieSound() {
+      const ctx = audio.ctx, L = audio.lis;
+      if (!ctx || ctx.state !== "running" || !audio.sfx) return;
+      const t = ctx.currentTime;
+      for (const d of REGIE.drones) {
+        if (!d.snd) {
+          if (d.spin < 0.02) continue;
+          const o = [ctx.createOscillator(), ctx.createOscillator(), ctx.createOscillator()], lp = ctx.createBiquadFilter(), g = ctx.createGain(), p = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+          o[0].type = o[1].type = "sawtooth";
+          o[2].type = "triangle";
+          lp.type = "lowpass";
+          lp.frequency.value = 1600;
+          g.gain.value = 0;
+          for (const q of o) { q.connect(lp); q.start(); }
+          lp.connect(g);
+          if (p) { g.connect(p); p.connect(audio.sfx); } else g.connect(audio.sfx);
+          d.snd = { o, g, p };
+        }
+        const s = d.snd, work = clamp(0.5 + d.v[1] * 0.09 + Math.hypot(d.tilt.rotation.x, d.tilt.rotation.z) * 0.9, 0.3, 1.2), f = (148 + 74 * work) * (0.3 + 0.7 * d.spin) * (1 + d.q * 0.045);
+        s.o[0].frequency.setTargetAtTime(f, t, 0.07);
+        s.o[1].frequency.setTargetAtTime(f * 1.013, t, 0.07);
+        s.o[2].frequency.setTargetAtTime(f * 2.01, t, 0.07);
+        let vol = 0, pan = 0;
+        if (L && d.spin > 0.02 && !G2.paused) {
+          const dx = d.p[0] - L.x, dz = d.p[2] - L.z, dy = d.p[1] - (L.y || 1.5), d2 = dx * dx + dy * dy + dz * dz;
+          vol = 0.045 * d.spin * (0.6 + 0.4 * work) / (1 + d2 / 70);
+          pan = clamp((dx * Math.sin(L.th || 0) + dz * Math.cos(L.th || 0)) / Math.max(Math.sqrt(d2), 2) * 0.8, -0.8, 0.8);
+        }
+        s.g.gain.setTargetAtTime(vol, t, 0.08);
+        if (s.p) s.p.pan.setTargetAtTime(pan, t, 0.08);
+        d.vol = vol;
+      }
     }
     function regieAim(n) {
       const c = REGIE.cams[n], fc = REGIE.fc;
@@ -11961,6 +12172,15 @@ void main(){
         const f = REGIE.feeds[s.feed];
         if (s.pic.material.uniforms.tMap.value !== f.rt.texture) { s.pic.material.uniforms.tMap.value = f.rt.texture; s.over.material.map = f.tex; s.over.material.needsUpdate = true; }
       }
+      const FY = REGIE.foyer, rp = REGIE.rp, showing = !!(FY && REGIE.last && rp.gap <= 0 && rp.idle <= 4);
+      if (FY) {
+        const dx = P.x - FY.c[0], dz = P.z - FY.c[2];
+        REGIE.sph.center.set(FY.c[0], FY.c[1], FY.c[2]);
+        REGIE.sph.radius = FY.r;
+        rp.seen = !!REGIE.last && (REGIE.force === 2 || dx < -0.3 && Math.hypot(dx, dz, P.y - FY.c[1]) < 22 && REGIE.fru.intersectsSphere(REGIE.sph));
+        const on = !!REGIE.last && rp.gap <= 0 && rp.seen && rp.t > 0.12;
+        FY.pic.visible = FY.over.visible = FY.back.visible = on;
+      }
       const picked = REGIE.screens.find((s) => s.feed === 1);
       REGIE.feeds[0].cam = REGIE.pg;
       REGIE.feeds[1].cam = picked ? picked.pick : -1;
@@ -11971,8 +12191,13 @@ void main(){
       REGIE.fr++;
       const fi = REGIE.fr & 1;
       const f = REGIE.feeds[fi];
-      if (!need[fi] || f.cam < 0 || G2.paused) return;
-      if (!REGIE.force && (REGIE.ft > 1 / 38 || REGIE.ft > 1 / 50 && (REGIE.fr >> 1 & 1))) return;
+      if (G2.paused) return;
+      const slow = !REGIE.force && (REGIE.ft > (REGIE.lite ? 1 / 24 : 1 / 38) || (REGIE.lite || REGIE.ft > 1 / 50) && (REGIE.fr >> 1 & 1));
+      if (!need[fi] || f.cam < 0) {
+        if (FY && REGIE.last && rp.seen && rp.gap <= 0 && !slow && fi === (need[0] ? 1 : 0)) regieReplay(REGIE.feeds[2]);
+        return;
+      }
+      if (slow) return;
       const t0 = performance.now();
       regieAim(f.cam);
       regieWords(f, REGIE.cams[f.cam].name);
@@ -13959,6 +14184,7 @@ void main(){
       if (!hallAsset || !models[0] || !models[0].main.helmet) return;
       const rg = SITE.blocks.find((b) => b[6] === "regal");
       if (!rg) return;
+      if (!REGIE.made) regieInit();
       const sheet = (w, h) => {
         const c = document.createElement("canvas");
         c.width = w;
@@ -13983,6 +14209,7 @@ void main(){
       const helm = (src, p, ry) => {
         const box = new THREE.Box3(), g = new THREE.Group(), inner = new THREE.Group();
         for (const c of src.children) {
+          if (!c.isMesh) { inner.add(c.clone()); continue; }
           c.geometry.computeBoundingBox();
           box.union(c.geometry.boundingBox);
           inner.add(new THREE.Mesh(c.geometry, c.material));
@@ -16402,6 +16629,7 @@ void main(){
               S[3] = (kb * Q.wheel[0] + k.skidF * clamp(go / 4, 0, 1) * Q.wheel[1] + v2 * Q.wheel[2] * g) * (Math.sin(seatT * 57 + 3) * 0.6 + Math.sin(seatT * 91) * 0.4);
             } else S[0] = S[1] = S[2] = S[3] = 0;
           }
+          REGIE.cdv[i] = cd;
           m.setPose(k, dt, cd);
           if (FG && riders[i] && riders[i].on) riderPose(i, k, dt);
           if (i < 8 && m.groundLight) {
