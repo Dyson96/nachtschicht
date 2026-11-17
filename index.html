@@ -5,7 +5,7 @@
 <!-- Nachtschicht Grand Prix. (c) 2026. Alle Rechte vorbehalten. Kopieren, Veraendern, Weiterverbreiten und Einbetten nur mit schriftlicher Erlaubnis; siehe LICENSE.txt. -->
 <meta name="robots" content="noindex, nofollow">
 <script>(function(){var ok=["dyson96.github.io"],h=location.hostname,loc=h===""||h==="localhost"||h==="127.0.0.1"||h==="[::1]"||/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(h)||/\.local$/.test(h),own=loc||!ok.length||ok.indexOf(h)>=0,fr=false;try{fr=window.top!==window.self}catch(e){fr=true}if(!own||(fr&&!loc)){window.__LOCK=1;document.write('<meta charset="utf-8"><body style="margin:0;background:#050409;color:#ccd;font:16px/1.5 sans-serif;display:grid;place-items:center;height:100vh;text-align:center"><p>Nachtschicht Grand Prix l\u00e4uft nur auf seiner eigenen Adresse.<br><a style="color:#ff4fa0" href="https://dyson96.github.io/nachtschicht/">Zum Spiel</a></p></body>');document.close();if(window.stop)window.stop();}})();</script>
-<script>window.__BUILD="17.11.2026 01:31";</script>
+<script>window.__BUILD="17.11.2026 01:35";</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -11029,6 +11029,18 @@ void main(){
       pit: [0, 0, 0], rec: [SET.rec, SET.recName] };
     const RELAY = "wss://nachtschicht.nachtschicht-gp.workers.dev";
     const RUN = hall.run;
+    const guard = (name, fn) => {
+      try {
+        fn();
+      } catch (e) {
+        const msg = "Betrieb/" + name + ": " + (e && e.message || e);
+        if (window.__errs) window.__errs.push(msg);
+        try {
+          repErr(msg, "");
+        } catch (e2) {
+        }
+      }
+    };
     const TAKT = { book: 60, board: 45, boardMax: 90, grid: 10, lap: 49, tail: 20, tailMax: 75, inn: 70, exit: 10, toGrid: [75, 160], outMax: 20, gearMax: 120, gearWait: 75, late: 30, allein: false };
     const me = { in: "menu", seat: 0, next: -1, run: 0, book: 0, idleT: 0, idleSaid: false, stuckT: 0 };
     status("Karts rollen aus der Box \u2026");
@@ -12650,7 +12662,8 @@ void main(){
         const T = stele.terms[j], w = stele.who[j], on = !!w && guide.t < w.until && (!w.me || foot.booked);
         const no = !on ? -1 : w.me ? me.seat >= 0 ? me.seat : me.next : w.seat, k = no >= 0 ? race.karts[no] : null;
         const promised = on && w.me && me.seat < 0 && me.next >= 0, full = on && w.me && no < 0, lauf = on && w.me ? me.book : bookNo();
-        const sigT = JSON.stringify([k ? [no, w.me ? myName() : k.driver.name] : 0, lauf, promised, full, fonts]);
+        const when = RUN.kind === "visit" && RUN.phase !== "open" && lauf === RUN.no + 1 ? " \xB7 AUFRUF IN ETWA " + etwa(runRest() + TAKT.exit) : "";
+        const sigT = JSON.stringify([k ? [no, w.me ? myName() : k.driver.name] : 0, lauf, when, promised, full, fonts]);
         if (sigT === T.sig) continue;
         T.sig = sigT;
         g = T.ctx;
@@ -12667,7 +12680,7 @@ void main(){
         g.fillText("CHECK-IN", 256, 250);
         g.fillStyle = "#35d8ff";
         g.font = "600 34px " + FONT;
-        g.fillText("LAUF " + lauf, 256, 310);
+        g.fillText("LAUF " + lauf + when, 256, 310, 470);
         if (full) {
           g.fillStyle = "#b8ff3a";
           g.font = "700 44px " + FONT;
@@ -15655,7 +15668,10 @@ void main(){
         }
         race.kicks.length = 0;
       }
-      if (hall.host) seatsDecide();
+      if (hall.host && (net.sdT = (net.sdT || 0) - dt) <= 0) {
+        net.sdT = 0.2;
+        guard("nummern", seatsDecide);
+      }
       net.cT -= dt;
       if (net.cT <= 0) {
         net.cT = net.cnt > 0 ? me.in === "kart" || hall.host && RUN.phase !== "open" ? 0.05 : 0.12 : 2;
@@ -16270,7 +16286,7 @@ void main(){
           net.keepT = 2;
           hallKeepSay();
         }
-        if (RUN.kind === "visit" && hallAsset) runDecide(dt);
+        if (RUN.kind === "visit" && hallAsset) guard("uhr", () => runDecide(dt));
       }
       {
         const strict = rcStrict();
@@ -17327,15 +17343,15 @@ void main(){
             }
             me.stuckT = (race.state === "racing" || race.state === "finished") && G2.state !== "grid" && !player.hold && (Math.abs(player.u) < 1.5 || Math.abs(wrapAngle(player.th - player.trTh)) > 1.75) ? me.stuckT + dt : 0;
           } else me.idleT = me.stuckT = 0;
-          if (RUN.kind === "visit" && hallAsset) raceControl(dt, player);
+          if (RUN.kind === "visit" && hallAsset) guard("rennleitung", () => raceControl(dt, player));
         }
         kartHint();
         if (!(RUN.phase === "open" && race.state !== "pit")) race.step(dt);
         handleEvents();
         runStep(dt);
         crewUpdate(dt, G2.time);
-        meClock(dt);
-        ghostStep(dt, G2.time);
+        guard("fristen", () => meClock(dt));
+        guard("gegangen", () => ghostStep(dt, G2.time));
         briefUpdate(dt);
         guideUpdate(dt);
         steleUpdate(dt);
