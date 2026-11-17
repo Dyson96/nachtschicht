@@ -5,7 +5,7 @@
 <!-- Nachtschicht Grand Prix. (c) 2026. Alle Rechte vorbehalten. Kopieren, Veraendern, Weiterverbreiten und Einbetten nur mit schriftlicher Erlaubnis; siehe LICENSE.txt. -->
 <meta name="robots" content="noindex, nofollow">
 <script>(function(){var ok=["dyson96.github.io"],h=location.hostname,loc=h===""||h==="localhost"||h==="127.0.0.1"||h==="[::1]"||/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(h)||/\.local$/.test(h),own=loc||!ok.length||ok.indexOf(h)>=0,fr=false;try{fr=window.top!==window.self}catch(e){fr=true}if(!own||(fr&&!loc)){window.__LOCK=1;document.write('<meta charset="utf-8"><body style="margin:0;background:#050409;color:#ccd;font:16px/1.5 sans-serif;display:grid;place-items:center;height:100vh;text-align:center"><p>Nachtschicht Grand Prix l\u00e4uft nur auf seiner eigenen Adresse.<br><a style="color:#ff4fa0" href="https://dyson96.github.io/nachtschicht/">Zum Spiel</a></p></body>');document.close();if(window.stop)window.stop();}})();</script>
-<script>window.__BUILD="17.11.2026 01:35";</script>
+<script>window.__BUILD="17.11.2026 01:39";</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -15010,18 +15010,37 @@ void main(){
     function netGot(m) {
       if (m.t === "hi") {
         const host = (m.id | 0) === (m.host | 0);
-        if (net.re && !host) {
+        if (net.re && !host && me.in !== "foot") {
           const ws = net.ws;
           net.ws = null;
           net.re = false;
-          net.again = 0;
+          net.again = 15;
           try {
             ws.onclose = null;
             ws.close();
           } catch (e) {
           }
-          note("In der Halle sind jetzt andere. \xDCber das Men\xFC kommst du zu ihnen.");
           return;
+        }
+        if (net.re && !host) {
+          const old = net.id;
+          fade(true);
+          setTimeout(() => fade(false), 500);
+          foot.lead = foot.go = null;
+          foot.desk && deskClose();
+          foot.x = FOOT.door[0];
+          foot.z = FOOT.door[1];
+          foot.y = 0;
+          foot.yaw = FOOT.door[2];
+          foot.bodyTh = foot.yaw - Math.PI / 2;
+          foot.vx = foot.vz = 0;
+          foot.helm = foot.back = foot.booked = false;
+          me.book = 0;
+          me.stay = me.expel = false;
+          me.gearT = me.outT = me.askT = 0;
+          cam.init = false;
+          note("Die Verbindung war weg. Du kommst wieder zur T\xFCr herein.");
+          setTimeout(() => netSay({ t: "bk", o: old }), 300);
         }
         net.re = false;
         net.id = m.id | 0;
@@ -15061,6 +15080,7 @@ void main(){
       } else if (m.f && m.m && typeof m.m === "object") {
         const f = m.f | 0, d = m.m;
         if (d.t === "c") netPerson(f, d);
+        else if (d.t === "bk") ghostEnd(d.o | 0);
         else if (d.t === "v") talkGot(f, d);
         else if (d.t === "k") netKick(d);
         else if (d.t === "h" && f === net.hostId && !hall.host) netHall(d);
